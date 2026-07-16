@@ -109,6 +109,7 @@ EOF
 
 echo "[6/6] Launching VPN 8 Server..."
 cd /opt/vpn8
+export BUILDKIT_PROGRESS=plain
 docker compose up -d --build
 
 if [ -x "\$(command -v ufw)" ]; then

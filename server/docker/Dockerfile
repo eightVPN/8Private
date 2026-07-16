@@ -5,13 +5,13 @@ WORKDIR /app
 
 # Copy dependency files first to cache dependencies
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download -x
 
 # Copy the entire workspace (required to compile shared and server modules together)
 COPY . .
 
 # Compile statically linked Go server binary for Linux
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o vpn8-server ./server/cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -v -ldflags="-s -w" -o vpn8-server ./server/cmd/main.go
 
 # Execution stage
 FROM alpine:latest

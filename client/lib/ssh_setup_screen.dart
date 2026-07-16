@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'services/ssh_deploy_service.dart';
@@ -253,6 +255,19 @@ class _SSHSetupScreenState extends State<SSHSetupScreen> {
                     letterSpacing: 2.0,
                   ),
                 ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.copy, color: AppColors.onSurfaceVariant, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _deployLogs.join('\n')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Logs copied to clipboard'), duration: Duration(seconds: 2)),
+                    );
+                  },
+                  tooltip: 'Copy all logs',
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -273,7 +288,7 @@ class _SSHSetupScreenState extends State<SSHSetupScreen> {
                     for (var logLine in _deployLogs)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
+                        child: SelectableText(
                           logLine,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 12,
@@ -637,12 +652,14 @@ class _SSHSetupScreenState extends State<SSHSetupScreen> {
         .deployServer(config)
         .listen(
           (logLine) {
+            debugPrint('DEPLOY: $logLine');
             setState(() {
               _deployLogs.add(logLine);
             });
             _scrollToBottom();
           },
           onError: (e) {
+            debugPrint('DEPLOY ERROR: $e');
             setState(() {
               _deployLogs.add('> ERROR: $e');
               _isDeploying = false;
