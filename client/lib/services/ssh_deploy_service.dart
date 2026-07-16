@@ -42,6 +42,21 @@ else
     echo "      Docker is already installed."
 fi
 
+echo "[2.5/6] Checking System RAM for Build Process..."
+TOTAL_MEM=\$(free -m | awk '/^Mem:/{print \$2}')
+if [ "\$TOTAL_MEM" -lt 2048 ]; then
+    echo "      Low RAM detected (\${TOTAL_MEM}MB). Creating temporary 2GB swap file..."
+    if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile || true
+        echo "      Swap enabled."
+    else
+        echo "      Swapfile already exists."
+    fi
+fi
+
 echo "[3/6] Setting up Virtual TUN Adapter..."
 if [ ! -c /dev/net/tun ]; then
     echo "      Provisioning /dev/net/tun node..."
