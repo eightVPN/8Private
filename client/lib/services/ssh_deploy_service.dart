@@ -149,11 +149,7 @@ echo "========================================="
 
       final session = await client.execute('bash -s');
 
-      // Write the script to stdin
-      session.stdin.add(utf8.encode(_bootstrapScript));
-      session.stdin.close();
-
-      // Read output
+      // Read output (set up streams BEFORE writing to stdin to avoid missing early output)
       final Stream<String> stdoutStream = session.stdout
           .cast<List<int>>()
           .transform(utf8.decoder)
@@ -164,6 +160,12 @@ echo "========================================="
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .map((line) => 'ERR: $line');
+
+      // Write the script to stdin asynchronously
+      Future.microtask(() {
+        session.stdin.add(utf8.encode(_bootstrapScript));
+        session.stdin.close();
+      });
 
       await for (final line in StreamGroup.merge([
         stdoutStream,
