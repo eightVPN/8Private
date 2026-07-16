@@ -162,9 +162,19 @@ echo "========================================="
 
       yield '> Authentication successful. Opening shell...';
 
-      final session = await client.execute('bash -s');
+      final String base64Script = base64Encode(utf8.encode(_bootstrapScript));
+      String command;
+      if (config.username == 'root') {
+        command = 'echo $base64Script | base64 -d | bash';
+      } else if (config.password != null) {
+        command = 'echo "${config.password}" | sudo -S bash -c "echo $base64Script | base64 -d | bash"';
+      } else {
+        command = 'echo $base64Script | base64 -d | sudo bash';
+      }
 
-      // Read output (set up streams BEFORE writing to stdin to avoid missing early output)
+      final session = await client.execute(command);
+
+      // Read output
       final Stream<String> stdoutStream = session.stdout
           .cast<List<int>>()
           .transform(utf8.decoder)
@@ -175,12 +185,6 @@ echo "========================================="
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .map((line) => 'ERR: $line');
-
-      // Write the script to stdin asynchronously
-      Future.microtask(() {
-        session.stdin.add(utf8.encode(_bootstrapScript));
-        session.stdin.close();
-      });
 
       await for (final line in StreamGroup.merge([
         stdoutStream,

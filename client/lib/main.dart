@@ -62,26 +62,33 @@ class MainNavigationShell extends StatefulWidget {
 }
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
-  String _currentScreen = 'home';
+  int _currentIndex = 0;
 
   void _navigateTo(String screen) {
-    setState(() => _currentScreen = screen);
+    int index = 0;
+    switch (screen) {
+      case 'home':
+        index = 0;
+      case 'admin':
+        index = 1;
+      case 'split':
+        index = 2;
+      case 'setup':
+        index = 3;
+    }
+    setState(() => _currentIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
-    Widget screen;
-    switch (_currentScreen) {
-      case 'admin':
-        screen = ServerAdministrationScreen(onNavigate: _navigateTo);
-      case 'split':
-        screen = SplitTunnelingScreen(onNavigate: _navigateTo);
-      case 'setup':
-        screen = SSHSetupScreen(onNavigate: _navigateTo);
-      default:
-        screen = MainConnectionScreen(onNavigate: _navigateTo);
-    }
-
-    return screen;
+    return IndexedStack(
+      index: _currentIndex,
+      children: [
+        MainConnectionScreen(onNavigate: _navigateTo),
+        ServerAdministrationScreen(onNavigate: _navigateTo),
+        SplitTunnelingScreen(onNavigate: _navigateTo),
+        SSHSetupScreen(onNavigate: _navigateTo),
+      ],
+    );
   }
 }
