@@ -26,6 +26,7 @@ type AuthResponse struct {
 	ServerIP   string `json:"server_ip,omitempty"`
 	Subnet     string `json:"subnet,omitempty"`
 	MTU        int    `json:"mtu,omitempty"`
+	DataPort   int    `json:"data_port,omitempty"`
 }
 
 var sniWhitelist = []string{
@@ -47,7 +48,8 @@ type VPNClient struct {
 	hwid         string
 	psk          []byte
 	quicConn     *quic.Conn
-	rawConn      net.PacketConn
+	dataConn     *shared.ObfuscatedConn
+	dataPort     int
 	tcpConn      net.Conn
 	tunDev       shared.TUNDevice
 	activeMode   string
@@ -127,9 +129,9 @@ func (c *VPNClient) cleanup() {
 		_ = (*c.quicConn).CloseWithError(0, "client stop")
 		c.quicConn = nil
 	}
-	if c.rawConn != nil {
-		_ = c.rawConn.Close()
-		c.rawConn = nil
+	if c.dataConn != nil {
+		_ = c.dataConn.Close()
+		c.dataConn = nil
 	}
 	if c.tcpConn != nil {
 		_ = c.tcpConn.Close()
@@ -188,25 +190,6 @@ func (c *VPNClient) connectionWatcher(ctx context.Context) {
 }
 
 func (c *VPNClient) connectUDP(ctx context.Context) error {
-	obf, err := shared.NewObfuscator(c.psk)
-	if err != nil {
-		return err
-	}
-
-	rConn, err := net.ListenPacket("udp", "0.0.0.0:0")
-	if err != nil {
-		return err
-	}
-	c.rawConn = rConn
-
-	obfConn := shared.NewObfuscatedConn(rConn, obf)
-
-	udpAddr, err := net.ResolveUDPAddr("udp", c.serverAddr)
-	if err != nil {
-		obfConn.Close()
-		return err
-	}
-
 	tlsConfig := &tls.Config{
 		ServerName:         c.selectRandomSNI(),
 		InsecureSkipVerify: true,
@@ -218,10 +201,9 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 		HandshakeIdleTimeout: 5 * time.Second,
 	}
 
-	log.Printf("Attempting UDP connection to server %s (SNI: %s)...", c.serverAddr, tlsConfig.ServerName)
-	conn, err := quic.Dial(ctx, obfConn, udpAddr, tlsConfig, quicConfig)
+	log.Printf("Attempting QUIC auth to server %s (SNI: %s)...", c.serverAddr, tlsConfig.ServerName)
+	conn, err := quic.DialAddr(ctx, c.serverAddr, tlsConfig, quicConfig)
 	if err != nil {
-		obfConn.Close()
 		return err
 	}
 	c.quicConn = conn
@@ -232,7 +214,8 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("Authenticated! Assigned IP: %s, Subnet: %s", resp.AssignedIP, resp.Subnet)
+	log.Printf("Authenticated! Assigned IP: %s, Subnet: %s, DataPort: %d", resp.AssignedIP, resp.Subnet, resp.DataPort)
+	c.dataPort = resp.DataPort
 
 	// Setup TUN Device
 	if err := c.setupTUN(resp); err != nil {
@@ -240,8 +223,38 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 		return fmt.Errorf("failed to setup TUN: %w", err)
 	}
 
-	go c.tunReadLoop(ctx, conn)
-	go c.quicReadLoop(ctx, conn)
+	// Setup Pure UDP Data Plane
+	pubIP, _, err := net.SplitHostPort(c.serverAddr)
+	if err != nil {
+		pubIP = c.serverAddr
+	}
+	dataServerAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", pubIP, c.dataPort))
+	if err != nil {
+		conn.CloseWithError(0, "data addr failed")
+		return err
+	}
+
+	obf, err := shared.NewObfuscator(c.psk)
+	if err != nil {
+		conn.CloseWithError(0, "obfuscator failed")
+		return err
+	}
+
+	dataRawConn, err := net.ListenPacket("udp", "0.0.0.0:0")
+	if err != nil {
+		conn.CloseWithError(0, "data listen failed")
+		return err
+	}
+	c.dataConn = shared.NewObfuscatedConn(dataRawConn, obf)
+
+	go c.tunToUdpLoop(ctx, dataServerAddr)
+	go c.udpToTunLoop(ctx)
+
+	// Keep connection alive
+	go func() {
+		<-ctx.Done()
+		conn.CloseWithError(0, "context cancelled")
+	}()
 
 	return nil
 }
@@ -327,7 +340,7 @@ func (c *VPNClient) setupTUN(resp *AuthResponse) error {
 	return nil
 }
 
-func (c *VPNClient) tunReadLoop(ctx context.Context, conn *quic.Conn) {
+func (c *VPNClient) tunToUdpLoop(ctx context.Context, serverAddr *net.UDPAddr) {
 	buf := make([]byte, shared.DefaultMTU+100)
 	for {
 		select {
@@ -347,15 +360,16 @@ func (c *VPNClient) tunReadLoop(ctx context.Context, conn *quic.Conn) {
 			return
 		}
 
-		// Forward raw IP packet via QUIC Datagram
-		if err := conn.SendDatagram(buf[:n]); err != nil {
-			log.Printf("QUIC SendDatagram error: %v", err)
+		// Forward raw IP packet via pure UDP
+		if _, err := c.dataConn.WriteTo(buf[:n], serverAddr); err != nil {
+			log.Printf("UDP WriteTo error: %v", err)
 			return
 		}
 	}
 }
 
-func (c *VPNClient) quicReadLoop(ctx context.Context, conn *quic.Conn) {
+func (c *VPNClient) udpToTunLoop(ctx context.Context) {
+	buf := make([]byte, shared.DefaultMTU+100)
 	for {
 		select {
 		case <-ctx.Done():
@@ -363,14 +377,14 @@ func (c *VPNClient) quicReadLoop(ctx context.Context, conn *quic.Conn) {
 		default:
 		}
 
-		data, err := conn.ReceiveDatagram(ctx)
+		n, _, err := c.dataConn.ReadFrom(buf)
 		if err != nil {
-			log.Printf("QUIC ReceiveDatagram error: %v", err)
+			log.Printf("UDP ReadFrom error: %v", err)
 			return
 		}
 
 		if c.tunDev != nil {
-			if _, err := c.tunDev.Write(data); err != nil {
+			if _, err := c.tunDev.Write(buf[:n]); err != nil {
 				log.Printf("TUN Write error: %v", err)
 			}
 		}

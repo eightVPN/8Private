@@ -33,6 +33,7 @@ type AuthResponse struct {
 	ServerIP   string `json:"server_ip,omitempty"`
 	Subnet     string `json:"subnet,omitempty"`
 	MTU        int    `json:"mtu,omitempty"`
+	DataPort   int    `json:"data_port,omitempty"`
 }
 
 // ClientSession tracks a connected VPN client and its allocated resources.
@@ -40,6 +41,8 @@ type ClientSession struct {
 	conn       *quic.Conn
 	user       *db.User
 	assignedIP net.IP
+	clientAddr net.Addr
+	addrMu     sync.RWMutex
 	cancel     context.CancelFunc
 }
 
@@ -53,6 +56,7 @@ type ServerConfig struct {
 	MaxClients int    // 0 = auto-detect
 	EnableNAT  bool
 	OutIface   string // e.g. "eth0", empty = auto-detect
+	DataPort   int
 }
 
 // VPNServer is the obfuscated UDP-QUIC tunneling server with TUN datagram relay.
@@ -63,6 +67,8 @@ type VPNServer struct {
 	quicConfig *quic.Config
 	listener   *quic.Listener
 	rawConn    net.PacketConn
+	dataConn   *shared.ObfuscatedConn
+	dataPort   int
 	tunDev     shared.TUNDevice
 	ipPool     *IPPool
 	sessions   map[string]*ClientSession // keyed by assigned IP string
@@ -131,6 +137,7 @@ func NewVPNServer(config ServerConfig) (*VPNServer, error) {
 		cancel:     cancel,
 		natEnabled: config.EnableNAT,
 		natIface:   config.OutIface,
+		dataPort:   config.DataPort,
 		bufPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, shared.DefaultMTU+100)
@@ -211,17 +218,27 @@ func (s *VPNServer) Start(addr string) error {
 	}
 	s.rawConn = rawConn
 
-	// Wrap the raw UDP socket with the GCM obfuscation layer.
-	obfConn := shared.NewObfuscatedConn(rawConn, s.obfuscator)
-
-	listener, err := quic.Listen(obfConn, s.tlsConfig, s.quicConfig)
+	// 1. Start standard QUIC Listener (Auth/Control Plane)
+	listener, err := quic.Listen(rawConn, s.tlsConfig, s.quicConfig)
 	if err != nil {
 		rawConn.Close()
 		return fmt.Errorf("failed to start QUIC listener: %w", err)
 	}
 	s.listener = listener
 
+	// 2. Start Obfuscated Data Listener (Pure UDP Data Plane)
+	dataAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", s.dataPort))
+	if err != nil {
+		return fmt.Errorf("failed to resolve data address: %w", err)
+	}
+	dataRawConn, err := net.ListenUDP("udp", dataAddr)
+	if err != nil {
+		return fmt.Errorf("failed to listen UDP data port: %w", err)
+	}
+	s.dataConn = shared.NewObfuscatedConn(dataRawConn, s.obfuscator)
+
 	go s.acceptLoop()
+	go s.dataReadLoop()
 
 	if s.tunDev != nil {
 		go s.tunReadLoop()
@@ -264,6 +281,11 @@ func (s *VPNServer) Close() error {
 	}
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if s.dataConn != nil {
+		if err := s.dataConn.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
@@ -340,6 +362,7 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 		ServerIP:   s.ipPool.ServerIP().String(),
 		Subnet:     s.ipPool.SubnetCIDR(),
 		MTU:        shared.DefaultMTU,
+		DataPort:   s.dataPort,
 	}
 	if err := json.NewEncoder(stream).Encode(resp); err != nil {
 		_ = s.ipPool.Release(assignedIP)
@@ -367,27 +390,65 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 		_ = s.ipPool.Release(assignedIP)
 	}()
 
-	// 7. Run the client datagram relay: client → TUN.
-	s.clientDatagramLoop(sessCtx, conn)
+	// The client's QUIC connection remains open for control messages and keep-alives.
+	// We wait until the context is cancelled (client disconnects).
+	<-sessCtx.Done()
 }
 
-// clientDatagramLoop reads datagrams from a client's QUIC connection and writes them to the TUN device.
-func (s *VPNServer) clientDatagramLoop(ctx context.Context, conn *quic.Conn) {
+// dataReadLoop reads raw UDP packets from dataConn (decrypted via Obfuscator),
+// performs NAT traversal by updating the client's source address, and writes to TUN.
+func (s *VPNServer) dataReadLoop() {
 	for {
-		data, err := conn.ReceiveDatagram(ctx)
-		if err != nil {
+		select {
+		case <-s.ctx.Done():
 			return
+		default:
 		}
 
-		if s.tunDev == nil {
+		bufPtr := s.bufPool.Get().(*[]byte)
+		buf := *bufPtr
+
+		n, addr, err := s.dataConn.ReadFrom(buf)
+		if err != nil {
+			s.bufPool.Put(bufPtr)
+			select {
+			case <-s.ctx.Done():
+				return
+			default:
+				log.Printf("vpn8: data read error: %v", err)
+				return
+			}
+		}
+
+		pkt := buf[:n]
+
+		// Parse source IP from the IPv4 header.
+		srcIP, err := shared.SrcIPFromPacket(pkt)
+		if err != nil || srcIP == nil {
+			s.bufPool.Put(bufPtr)
 			continue
 		}
 
-		_, err = s.tunDev.Write(data)
-		if err != nil {
-			log.Printf("vpn8: TUN write error: %v", err)
-			return
+		srcKey := srcIP.String()
+		s.sessionsMu.RLock()
+		sess, ok := s.sessions[srcKey]
+		s.sessionsMu.RUnlock()
+
+		if ok {
+			// Update client's NAT address for returning packets
+			sess.addrMu.Lock()
+			sess.clientAddr = addr
+			sess.addrMu.Unlock()
+
+			if s.tunDev != nil {
+				_, err = s.tunDev.Write(pkt)
+				if err != nil {
+					log.Printf("vpn8: TUN write error: %v", err)
+				}
+			}
 		}
+
+		s.bufPool.Put(bufPtr)
 	}
 }
 
@@ -432,7 +493,13 @@ func (s *VPNServer) tunReadLoop() {
 		s.sessionsMu.RUnlock()
 
 		if ok {
-			_ = sess.conn.SendDatagram(pkt)
+			sess.addrMu.RLock()
+			clientAddr := sess.clientAddr
+			sess.addrMu.RUnlock()
+
+			if clientAddr != nil {
+				_, _ = s.dataConn.WriteTo(pkt, clientAddr)
+			}
 		}
 
 		s.bufPool.Put(bufPtr)

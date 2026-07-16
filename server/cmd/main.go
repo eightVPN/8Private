@@ -20,6 +20,7 @@ func main() {
 
 	// 1. Read configurations from Environment Variables
 	vpnAddr := getEnv("VPN_ADDR", "0.0.0.0:51820")
+	dataPortStr := getEnv("VPN_DATA_PORT", "51821")
 	apiAddr := getEnv("API_ADDR", "0.0.0.0:8080")
 	apiKey := getEnv("API_KEY", "vpn8_admin_default_token_9988")
 	pskHex := getEnv("VPN_PSK", "43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38") // default hex key
@@ -33,6 +34,11 @@ func main() {
 	maxClients, err := strconv.Atoi(maxClientsStr)
 	if err != nil {
 		maxClients = 0 // auto-detect
+	}
+	
+	dataPort, err := strconv.Atoi(dataPortStr)
+	if err != nil {
+		dataPort = 51821
 	}
 
 	psk, err := hex.DecodeString(pskHex)
@@ -79,6 +85,7 @@ func main() {
 		MaxClients: maxClients,
 		EnableNAT:  enableNAT,
 		OutIface:   outIface,
+		DataPort:   dataPort,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize VPN daemon: %v", err)
