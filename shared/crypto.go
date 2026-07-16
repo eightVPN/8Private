@@ -12,13 +12,12 @@ import (
 // ErrInvalidPacket size or authentication failure errors.
 var (
 	ErrPacketTooShort   = errors.New("packet is too short to be deobfuscated")
-	ErrDecryptionFailed = errors.New("failed to decrypt or authenticate packet")
 	ErrInvalidKeySize   = errors.New("pre-shared key must be exactly 16 or 32 bytes long")
 )
 
 // Obfuscator handles packet-level encryption and decryption to hide VPN signatures.
 type Obfuscator struct {
-	aead cipher.AEAD
+	block cipher.Block
 }
 
 // NewObfuscator initializes an Obfuscator using a pre-shared key (PSK).
@@ -33,44 +32,36 @@ func NewObfuscator(psk []byte) (*Obfuscator, error) {
 		return nil, err
 	}
 
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Obfuscator{aead: aead}, nil
+	return &Obfuscator{block: block}, nil
 }
 
-// Obfuscate wraps a plaintext packet by encrypting it.
-// The resulting slice format: [12-byte Nonce][Ciphertext + 16-byte Auth Tag]
-func (o *Obfuscator) Obfuscate(plaintext []byte) ([]byte, error) {
-	nonce := make([]byte, o.aead.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
+// ObfuscateTo encrypts data directly into the provided dst buffer (Zero-Allocation).
+// The resulting slice format: [IV/Nonce][Ciphertext]
+func (o *Obfuscator) ObfuscateTo(plaintext, dst []byte) (int, error) {
+	bs := o.block.BlockSize()
+	iv := dst[:bs]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return 0, err
 	}
 
-	// Allocate buffer with exact size: nonce size + plaintext length + GCM overhead (16 bytes)
-	out := make([]byte, len(nonce), len(nonce)+len(plaintext)+o.aead.Overhead())
-	copy(out, nonce)
-
-	return o.aead.Seal(out, nonce, plaintext, nil), nil
+	stream := cipher.NewCTR(o.block, iv)
+	stream.XORKeyStream(dst[bs:bs+len(plaintext)], plaintext)
+	return bs + len(plaintext), nil
 }
 
-// Deobfuscate decrypts and authenticates a packet.
-// Returns an error if the packet is too short or if authentication fails.
+// Deobfuscate decrypts a packet in-place.
+// Returns a slice of the original buffer (actual points to a subslice of ciphertext).
 func (o *Obfuscator) Deobfuscate(ciphertext []byte) ([]byte, error) {
-	nonceSize := o.aead.NonceSize()
-	if len(ciphertext) < nonceSize+o.aead.Overhead() {
+	bs := o.block.BlockSize()
+	if len(ciphertext) < bs {
 		return nil, ErrPacketTooShort
 	}
 
-	nonce := ciphertext[:nonceSize]
-	actualCiphertext := ciphertext[nonceSize:]
+	iv := ciphertext[:bs]
+	actual := ciphertext[bs:]
 
-	plaintext, err := o.aead.Open(nil, nonce, actualCiphertext, nil)
-	if err != nil {
-		return nil, ErrDecryptionFailed
-	}
+	stream := cipher.NewCTR(o.block, iv)
+	stream.XORKeyStream(actual, actual)
 
-	return plaintext, nil
+	return actual, nil
 }

@@ -432,10 +432,7 @@ func (s *VPNServer) tunReadLoop() {
 		s.sessionsMu.RUnlock()
 
 		if ok {
-			// Make a copy for the datagram send since the buffer will be reused.
-			datagram := make([]byte, n)
-			copy(datagram, pkt)
-			_ = sess.conn.SendDatagram(datagram)
+			_ = sess.conn.SendDatagram(pkt)
 		}
 
 		s.bufPool.Put(bufPtr)

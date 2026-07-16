@@ -2,7 +2,15 @@ package shared
 
 import (
 	"net"
+	"sync"
 )
+
+var udpBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 65535)
+		return &b
+	},
+}
 
 // ObfuscatedConn wraps a net.PacketConn and obfuscates/deobfuscates all network packets in transit.
 type ObfuscatedConn struct {
@@ -22,8 +30,9 @@ func NewObfuscatedConn(conn net.PacketConn, obf *Obfuscator) *ObfuscatedConn {
 // into the provided slice. If authentication fails, the packet is silently discarded (blackholed),
 // and the loop continues to read the next packet.
 func (c *ObfuscatedConn) ReadFrom(p []byte) (int, net.Addr, error) {
-	// Allocate a buffer large enough for a maximum UDP payload
-	tempBuf := make([]byte, 65535)
+	bufPtr := udpBufPool.Get().(*[]byte)
+	defer udpBufPool.Put(bufPtr)
+	tempBuf := *bufPtr
 
 	for {
 		rawN, rawAddr, err := c.PacketConn.ReadFrom(tempBuf)
@@ -46,12 +55,16 @@ func (c *ObfuscatedConn) ReadFrom(p []byte) (int, net.Addr, error) {
 // WriteTo encrypts the plaintext payload and writes the obfuscated packet to the target address.
 // It returns the logical number of bytes written (matching len(p)) on success.
 func (c *ObfuscatedConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	ciphertext, err := c.obf.Obfuscate(p)
+	bufPtr := udpBufPool.Get().(*[]byte)
+	defer udpBufPool.Put(bufPtr)
+	out := *bufPtr
+
+	n, err := c.obf.ObfuscateTo(p, out)
 	if err != nil {
 		return 0, err
 	}
 
-	_, err = c.PacketConn.WriteTo(ciphertext, addr)
+	_, err = c.PacketConn.WriteTo(out[:n], addr)
 	if err != nil {
 		return 0, err
 	}

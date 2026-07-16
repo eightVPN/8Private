@@ -176,6 +176,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  internet_speed_test:
+    dependency: "direct main"
+    description:
+      name: internet_speed_test
+      sha256: d0d971969616f4bd3f65da3b2dccf3989dc1a6eb4bb2b931e66c4babd3feffa5
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.0"
   jni:
     dependency: transitive
     description:
@@ -565,6 +573,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.7"
+  tuple:
+    dependency: transitive
+    description:
+      name: tuple
+      sha256: a97ce2013f240b2f3807bcbaf218765b6f301c3eff91092bcfa23a039e7dd151
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.2"
   typed_data:
     dependency: transitive
     description:

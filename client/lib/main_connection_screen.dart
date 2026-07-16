@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:internet_speed_test/internet_speed_test.dart';
+import 'package:internet_speed_test/callbacks_enum.dart';
 import 'theme.dart';
 import 'vpn_provider.dart';
 
@@ -542,16 +544,93 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
     );
   }
 
+  bool _isSpeedTesting = false;
+  double _testDownloadSpeed = 0.0;
+  double _testUploadSpeed = 0.0;
+  final _internetSpeedTest = InternetSpeedTest();
+
+  void _startSpeedTest() {
+    setState(() {
+      _isSpeedTesting = true;
+      _testDownloadSpeed = 0.0;
+      _testUploadSpeed = 0.0;
+    });
+
+    _internetSpeedTest.startDownloadTesting(
+      onDone: (double transferRate, SpeedUnit unit) {
+        setState(() {
+          _testDownloadSpeed = transferRate;
+        });
+        // Start upload testing after download finishes
+        _internetSpeedTest.startUploadTesting(
+          onDone: (double transferRate, SpeedUnit unit) {
+            setState(() {
+              _testUploadSpeed = transferRate;
+              _isSpeedTesting = false;
+            });
+          },
+          onProgress: (double percent, double transferRate, SpeedUnit unit) {
+            setState(() {
+              _testUploadSpeed = transferRate;
+            });
+          },
+          onError: (String errorMessage, String speedTestError) {
+            setState(() => _isSpeedTesting = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload test failed: $errorMessage')),
+            );
+          },
+        );
+      },
+      onProgress: (double percent, double transferRate, SpeedUnit unit) {
+        setState(() {
+          _testDownloadSpeed = transferRate;
+        });
+      },
+      onError: (String errorMessage, String speedTestError) {
+        setState(() => _isSpeedTesting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download test failed: $errorMessage')),
+        );
+      },
+    );
+  }
+
   Widget _buildStatsSection(VPNProvider provider, bool isConnected) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          // Speed Test Button
+          if (isConnected && !_isSpeedTesting)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: ElevatedButton.icon(
+                onPressed: _startSpeedTest,
+                icon: const Icon(Icons.speed),
+                label: const Text('Run Speed Test'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          if (_isSpeedTesting)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            ),
           // Download card
           _buildSpeedCard(
             label: 'DOWNLOAD',
             value: isConnected
-                ? provider.downloadSpeed.toStringAsFixed(1)
+                ? (_isSpeedTesting || _testDownloadSpeed > 0 ? _testDownloadSpeed.toStringAsFixed(1) : provider.downloadSpeed.toStringAsFixed(1))
                 : '0.0',
             icon: Icons.arrow_downward,
             color: AppColors.tertiary,
@@ -562,7 +641,7 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
           _buildSpeedCard(
             label: 'UPLOAD',
             value: isConnected
-                ? provider.uploadSpeed.toStringAsFixed(1)
+                ? (_isSpeedTesting || _testUploadSpeed > 0 ? _testUploadSpeed.toStringAsFixed(1) : provider.uploadSpeed.toStringAsFixed(1))
                 : '0.0',
             icon: Icons.arrow_upward,
             color: AppColors.primary,

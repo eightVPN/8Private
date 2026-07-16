@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/daemon_service.dart';
 
 enum VPNState { disconnected, connecting, connected }
@@ -22,6 +24,24 @@ class ServerProfile {
     required this.accessKey,
     required this.latencyMs,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'ip': ip,
+        'port': port,
+        'accessKey': accessKey,
+        'latencyMs': latencyMs,
+      };
+
+  factory ServerProfile.fromJson(Map<String, dynamic> json) => ServerProfile(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        ip: json['ip'] as String,
+        port: json['port'] as int,
+        accessKey: json['accessKey'] as String,
+        latencyMs: json['latencyMs'] as int,
+      );
 }
 
 class VPNUser {
@@ -54,7 +74,7 @@ class VPNProvider extends ChangeNotifier {
   Duration _sessionDuration = Duration.zero;
 
   ServerProfile? _selectedServer;
-  final List<ServerProfile> _servers = [];
+  List<ServerProfile> _servers = [];
 
   // Administration State
   final List<VPNUser> _users = [];
@@ -85,8 +105,36 @@ class VPNProvider extends ChangeNotifier {
   ];
 
   VPNProvider() {
-    if (_servers.isNotEmpty) {
+    _loadFromPrefs();
+  }
+
+  Future<void> _loadFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final serversJson = prefs.getStringList('servers');
+    if (serversJson != null) {
+      _servers = serversJson
+          .map((e) => ServerProfile.fromJson(jsonDecode(e)))
+          .toList();
+    }
+    
+    final selectedId = prefs.getString('selectedServerId');
+    if (selectedId != null && _servers.isNotEmpty) {
+      _selectedServer = _servers.cast<ServerProfile?>().firstWhere(
+            (s) => s?.id == selectedId,
+            orElse: () => _servers.first,
+          );
+    } else if (_servers.isNotEmpty) {
       _selectedServer = _servers.first;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _saveToPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final serversJson = _servers.map((s) => jsonEncode(s.toJson())).toList();
+    await prefs.setStringList('servers', serversJson);
+    if (_selectedServer != null) {
+      await prefs.setString('selectedServerId', _selectedServer!.id);
     }
   }
 
@@ -183,6 +231,7 @@ class VPNProvider extends ChangeNotifier {
     if (_selectedServer == null) {
       _selectedServer = server;
     }
+    _saveToPrefs();
     notifyListeners();
   }
 
@@ -192,6 +241,7 @@ class VPNProvider extends ChangeNotifier {
     if (_selectedServer?.id == id) {
       _selectedServer = _servers.isNotEmpty ? _servers.first : null;
     }
+    _saveToPrefs();
     notifyListeners();
   }
 
@@ -199,6 +249,7 @@ class VPNProvider extends ChangeNotifier {
   void selectServer(ServerProfile server) {
     _selectedServer = server;
     _latency = server.latencyMs;
+    _saveToPrefs();
     if (_state == VPNState.connected) {
       disconnect();
       connect();
