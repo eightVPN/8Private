@@ -3,7 +3,7 @@ package shared
 import "net"
 
 // DefaultMTU is the default MTU for the TUN device (smaller than 1500 to account for QUIC+encryption overhead).
-const DefaultMTU = 1400
+const DefaultMTU = 1200
 
 // TUNDevice represents a platform-independent virtual network (TUN) device.
 type TUNDevice interface {

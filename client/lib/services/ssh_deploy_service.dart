@@ -77,9 +77,9 @@ if [ -z "\$OUT_IFACE" ]; then OUT_IFACE="eth0"; fi
 echo "      Interface: \$OUT_IFACE"
 
 echo "[5/6] Syncing and Configuring..."
-if ! [ -x "$(command -v git)" ]; then
-    if [ -x "$(command -v apt-get)" ]; then apt-get install git -y;
-    elif [ -x "$(command -v yum)" ]; then yum install git -y; fi
+if ! [ -x "\$(command -v git)" ]; then
+    if [ -x "\$(command -v apt-get)" ]; then apt-get install git -y;
+    elif [ -x "\$(command -v yum)" ]; then yum install git -y; fi
 fi
 
 mkdir -p /opt/vpn8/data
@@ -111,6 +111,7 @@ services:
     image: vpn8-server:local
     container_name: vpn8-server
     restart: always
+    privileged: true
     cap_add:
       - NET_ADMIN
     devices:
@@ -133,6 +134,7 @@ EOF
 
 echo "[6/6] Launching VPN 8 Server..."
 cd /opt/vpn8
+sysctl -w net.ipv4.ip_forward=1 || true
 export BUILDKIT_PROGRESS=plain
 if [ "\$NEEDS_BUILD" = true ]; then
     docker compose up -d --build

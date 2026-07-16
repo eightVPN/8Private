@@ -96,12 +96,15 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 
 		if gw != "" {
 			// Route server traffic to original gateway so the encrypted tunnel packets don't loop
-			_ = exec.Command("route", "add", "-host", serverIPStr, gw).Run()
+			out, err := exec.Command("route", "add", "-host", serverIPStr, gw).CombinedOutput()
+			fmt.Printf("Route host to GW: %v %s\n", err, string(out))
 		}
 
 		// Route all other traffic to utun interface (0.0.0.0/1 and 128.0.0.0/1)
-		_ = exec.Command("route", "add", "-net", "0.0.0.0/1", "-interface", ifName).Run()
-		_ = exec.Command("route", "add", "-net", "128.0.0.0/1", "-interface", ifName).Run()
+		out1, err1 := exec.Command("route", "add", "-net", "0.0.0.0/1", "-interface", ifName).CombinedOutput()
+		fmt.Printf("Route 0.0.0.0/1: %v %s\n", err1, string(out1))
+		out2, err2 := exec.Command("route", "add", "-net", "128.0.0.0/1", "-interface", ifName).CombinedOutput()
+		fmt.Printf("Route 128.0.0.0/1: %v %s\n", err2, string(out2))
 	}
 
 	return &darwinTUN{fd: fd, name: ifName}, nil
@@ -141,8 +144,10 @@ func (t *darwinTUN) Write(buf []byte) (int, error) {
 	return n - afHeaderSize, nil
 }
 
-// Close closes the utun socket.
+// Close closes the utun socket and removes routes.
 func (t *darwinTUN) Close() error {
+	_ = exec.Command("route", "delete", "-net", "0.0.0.0/1", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-net", "128.0.0.0/1", "-interface", t.name).Run()
 	return unix.Close(t.fd)
 }
 

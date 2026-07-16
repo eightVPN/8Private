@@ -9,8 +9,6 @@ class DaemonService {
 
   /// Starts the VPN core daemon with elevated privileges if not already running.
   static Future<void> ensureDaemonRunning() async {
-    if (_daemonStarted) return;
-    
     // Check if it's already responding
     try {
       final res = await http.get(Uri.parse('$_apiBaseUrl/status')).timeout(const Duration(seconds: 1));
@@ -20,6 +18,7 @@ class DaemonService {
       }
     } catch (_) {
       // Not running, proceed to start
+      _daemonStarted = false;
     }
 
     // During local macOS development, the Flutter app runs in a Sandbox container, 
@@ -33,7 +32,7 @@ class DaemonService {
 
     if (Platform.isMacOS) {
       final currentPid = pid;
-      final script = 'do shell script "$executablePath -pid $currentPid > /dev/null 2>&1 &" with administrator privileges';
+      final script = 'do shell script "$executablePath -pid $currentPid > /tmp/vpn8_daemon.log 2>&1 &" with administrator privileges';
       
       final result = await Process.run('osascript', ['-e', script]);
       

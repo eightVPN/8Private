@@ -193,7 +193,7 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 		return err
 	}
 
-	rConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	rConn, err := net.ListenPacket("udp", "0.0.0.0:0")
 	if err != nil {
 		return err
 	}
@@ -306,12 +306,17 @@ func (c *VPNClient) setupTUN(resp *AuthResponse) error {
 		}
 	}
 
+	pubIP, _, err := net.SplitHostPort(c.serverAddr)
+	if err != nil {
+		pubIP = c.serverAddr
+	}
+
 	tunConfig := shared.TUNConfig{
 		DevName: c.GenerateVirtualTUNName(),
 		Address: net.ParseIP(resp.AssignedIP),
 		CIDR:    cidr,
 		MTU:     resp.MTU,
-		ServerIP: net.ParseIP(resp.ServerIP),
+		ServerIP: net.ParseIP(pubIP),
 	}
 
 	dev, err := shared.CreateTUN(tunConfig)
