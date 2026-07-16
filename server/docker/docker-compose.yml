@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  vpn8-server:
+    build:
+      context: ../..
+      dockerfile: server/docker/Dockerfile
+    image: vpn8-server:latest
+    container_name: vpn8-server
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    network_mode: host
+    environment:
+      - VPN_ADDR=:51820
+      - API_ADDR=:8080
+      - API_KEY=vpn8_admin_default_token_9988
+      - VPN_PSK=43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38
+      - DB_PATH=/app/data/vpn8.db
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Server Setup | VPN 8</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=Geist:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #15121d;
+            color: #e7dff0;
+            font-family: 'Geist', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(28, 22, 46, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .metallic-border {
+            border: 1px solid;
+            border-image-source: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
+            border-image-slice: 1;
+        }
+
+        .neon-glow-primary {
+            box-shadow: 0px 0px 20px rgba(122, 34, 255, 0.5);
+        }
+
+        .neon-text-cyan {
+            text-shadow: 0 0 10px rgba(76, 215, 246, 0.5);
+        }
+
+        .orb-pulse {
+            animation: pulse 3s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 40px rgba(122, 34, 255, 0.6); }
+        }
+
+        .terminal-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 18px;
+            background: #4cd7f6;
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#260059",
+                    "on-error-container": "#ffdad6",
+                    "on-secondary-container": "#c8aaff",
+                    "on-secondary": "#3f0689",
+                    "on-primary-fixed": "#25005a",
+                    "on-surface-variant": "#ccc2d9",
+                    "on-secondary-fixed-variant": "#572ba0",
+                    "surface-bright": "#3b3744",
+                    "inverse-primary": "#7516fa",
+                    "on-tertiary-fixed": "#001f26",
+                    "surface-container-low": "#1d1a26",
+                    "tertiary-fixed-dim": "#4cd7f6",
+                    "tertiary": "#4cd7f6",
+                    "on-primary": "#3e008e",
+                    "error": "#ffb4ab",
+                    "inverse-on-surface": "#322e3b",
+                    "surface-variant": "#373340",
+                    "on-primary-container": "#e8daff",
+                    "outline-variant": "#4a4456",
+                    "primary-fixed": "#eaddff",
+                    "surface-container-high": "#2c2834",
+                    "on-tertiary-container": "#a4ebff",
+                    "inverse-surface": "#e7dff0",
+                    "surface-tint": "#d2bcff",
+                    "surface-container-highest": "#373340",
+                    "surface-container-lowest": "#100c18",
+                    "surface-container": "#211e2a",
+                    "secondary-container": "#592da2",
+                    "on-error": "#690005",
+                    "error-container": "#93000a",
+                    "tertiary-container": "#006d80",
+                    "secondary-fixed": "#ebdcff",
+                    "on-surface": "#e7dff0",
+                    "surface-dim": "#15121d",
+                    "primary": "#d2bcff",
+                    "on-primary-fixed-variant": "#5900c7",
+                    "background": "#15121d",
+                    "tertiary-fixed": "#acedff",
+                    "primary-fixed-dim": "#d2bcff",
+                    "on-tertiary": "#003640",
+                    "secondary-fixed-dim": "#d3bbff",
+                    "on-tertiary-fixed-variant": "#004e5c",
+                    "outline": "#968da2",
+                    "on-background": "#e7dff0",
+                    "surface": "#15121d",
+                    "secondary": "#d3bbff",
+                    "primary-container": "#7a22ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "8px",
+                    "xl": "80px",
+                    "sm": "12px",
+                    "xs": "4px",
+                    "lg": "48px",
+                    "md": "24px",
+                    "container-max": "1200px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Geist"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "label-sm": ["Geist"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface">
+<!-- Background Shader -->
+
+<!-- TopAppBar Navigation -->
+<header class="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(122,34,255,0.2)]">
+<div class="flex justify-between items-center px-lg py-sm w-full max-w-container-max mx-auto">
+<div class="flex items-center gap-base">
+<span class="material-symbols-outlined text-primary" data-icon="security">security</span>
+<h1 class="font-headline-md text-primary tracking-tighter">VPN 8</h1>
+</div>
+<div class="hidden md:flex items-center gap-md">
+<nav class="flex gap-lg">
+<a class="text-primary font-label-sm hover:opacity-80 transition-opacity" href="#">Deploy</a>
+<a class="text-on-surface-variant font-label-sm hover:text-primary transition-colors" href="#">Servers</a>
+<a class="text-on-surface-variant font-label-sm hover:text-primary transition-colors" href="#">Logs</a>
+</nav>
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="High-resolution profile portrait of a professional network security engineer, studio lighting with purple and cyan rim lights against a dark industrial background. Professional tech-aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsk0yxB0jQS9cbf0-TTDAXrF4_1YKHjvCBcWsqC64SnberSL5gREHOnC5U4JF7gerjBzxlZraN4C8NkPtr43K7nOao32Ic2UyEaPTp3J_gLLoR77N-7vRm6c28ah6dXzil_OfIV1-Lml3OZxvYbQ7t_lSvM0YhHdLGHdtmFadN2bTzvZpVm_zMBCWWEgDz6fDVH0xlt12x6n9w9UybEQ07jnaBoKxSSkTpTM0tMUYComjPeBBaSaOZ"/>
+</div>
+</div>
+<div class="md:hidden">
+<span class="material-symbols-outlined text-on-surface" data-icon="menu">menu</span>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="relative z-10 pt-xl pb-32 px-md flex flex-col items-center min-h-screen">
+<div class="max-w-4xl w-full mt-lg grid grid-cols-1 lg:grid-cols-12 gap-lg items-start">
+<!-- Left Side: Technical Context -->
+<div class="lg:col-span-5 space-y-md lg:sticky lg:top-32">
+<div class="flex items-center gap-sm">
+<span class="px-sm py-1 rounded-full bg-tertiary-container/30 border border-tertiary/20 text-tertiary text-[10px] font-bold tracking-widest uppercase">Node Provisioning</span>
+<div class="flex-grow h-px bg-gradient-to-r from-tertiary/20 to-transparent"></div>
+</div>
+<h2 class="font-display-lg text-display-lg leading-tight">Server Setup</h2>
+<p class="font-body-md text-on-surface-variant leading-relaxed">
+                    Establish a secure bridge to your infrastructure. VPN 8 uses high-level SSH automation to deploy a containerized Docker environment, ensuring your network is isolated and optimized within seconds.
+                </p>
+<div class="glass-panel p-md rounded-xl space-y-sm">
+<div class="flex items-center gap-sm text-tertiary">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+<span class="font-label-sm uppercase tracking-wider">Initialization Sequence</span>
+</div>
+<div class="bg-black/40 p-sm rounded-lg border border-white/5 font-mono text-[13px] text-on-surface-variant space-y-1">
+<p class="text-tertiary-fixed-dim">&gt; apt-get update &amp;&amp; install docker.io</p>
+<p class="text-on-surface-variant">&gt; generating secure keys...</p>
+<p class="text-on-surface-variant">&gt; mounting obsidian-core-v8<span class="terminal-cursor"></span></p>
+</div>
+</div>
+<div class="flex items-center gap-md p-sm">
+<div class="w-12 h-12 flex items-center justify-center rounded-lg bg-surface-container-high border border-white/10">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="dock">dock</span>
+</div>
+<div>
+<h4 class="font-label-sm text-on-surface">Docker Engine</h4>
+<p class="text-[11px] text-on-surface-variant">Automated deployment on Ubuntu 20.04+</p>
+</div>
+</div>
+</div>
+<!-- Right Side: Configuration Form -->
+<div class="lg:col-span-7">
+<div class="glass-panel rounded-2xl p-lg metallic-border relative overflow-hidden">
+<!-- Subtle Glow Effect in corner -->
+<div class="absolute -top-24 -right-24 w-48 h-48 bg-primary/20 blur-[80px] rounded-full"></div>
+<form class="space-y-md relative z-10">
+<!-- IP Address Field -->
+<div class="space-y-xs">
+<label class="font-label-sm text-outline uppercase tracking-widest pl-1">Server IPv4 Address</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-xl" data-icon="dns">dns</span>
+<input class="w-full bg-surface-container-lowest/80 border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-mono text-primary outline-none" placeholder="192.168.1.1" type="text"/>
+</div>
+</div>
+<!-- Username & Port Grid -->
+<div class="grid grid-cols-2 gap-md">
+<div class="space-y-xs">
+<label class="font-label-sm text-outline uppercase tracking-widest pl-1">SSH Username</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-xl" data-icon="person">person</span>
+<input class="w-full bg-surface-container-lowest/80 border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-on-surface outline-none" type="text" value="root"/>
+</div>
+</div>
+<div class="space-y-xs">
+<label class="font-label-sm text-outline uppercase tracking-widest pl-1">SSH Port</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-xl" data-icon="numbers">numbers</span>
+<input class="w-full bg-surface-container-lowest/80 border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-on-surface outline-none" type="text" value="22"/>
+</div>
+</div>
+</div>
+<!-- Authentication Toggle (Simulated) -->
+<div class="flex p-1 bg-surface-container-low rounded-lg border border-white/5">
+<button class="flex-1 py-2 text-label-sm bg-primary-container text-on-primary-container rounded-md shadow-lg" type="button">Password</button>
+<button class="flex-1 py-2 text-label-sm text-on-surface-variant hover:text-on-surface transition-colors" type="button">SSH Key</button>
+</div>
+<!-- Password Field -->
+<div class="space-y-xs">
+<label class="font-label-sm text-outline uppercase tracking-widest pl-1">Root Password</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-xl" data-icon="key">key</span>
+<input class="w-full bg-surface-container-lowest/80 border border-white/10 rounded-xl py-4 pl-12 pr-12 focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-on-surface outline-none" placeholder="••••••••••••" type="password"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+<div class="pt-md">
+<div class="flex items-center gap-sm mb-lg">
+<input class="w-5 h-5 rounded border-white/20 bg-surface-container-high text-primary focus:ring-primary focus:ring-offset-0" id="auto-update" type="checkbox"/>
+<label class="text-label-sm text-on-surface-variant" for="auto-update">Enable automatic kernel security updates via Watchtower</label>
+</div>
+<button class="w-full group relative overflow-hidden bg-gradient-to-r from-primary-container to-[#5900c7] py-5 rounded-xl text-white font-headline-md tracking-tight active:scale-[0.98] transition-all neon-glow-primary" type="button">
+<div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<span class="flex items-center justify-center gap-sm">
+                                    Deploy Server
+                                    <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="rocket_launch">rocket_launch</span>
+</span>
+</button>
+</div>
+</form>
+<!-- Footer Warning -->
+<div class="mt-lg pt-md border-t border-white/5 flex gap-sm text-[11px] text-outline italic">
+<span class="material-symbols-outlined text-[16px]" data-icon="info">info</span>
+<span>Deploying a server will install Docker, Nginx, and WireGuard. Ensure your cloud provider's firewall permits traffic on port 51820.</span>
+</div>
+</div>
+<!-- Featured Graphic / Illustration -->
+<div class="mt-lg grid grid-cols-2 gap-md">
+<div class="glass-panel p-md rounded-xl flex items-center gap-md">
+<div class="w-10 h-10 rounded bg-tertiary-container/20 border border-tertiary/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="vpn_key">vpn_key</span>
+</div>
+<div>
+<p class="font-label-sm text-on-surface">End-to-End Encryption</p>
+<p class="text-[10px] text-on-surface-variant">256-bit AES protection</p>
+</div>
+</div>
+<div class="glass-panel p-md rounded-xl flex items-center gap-md">
+<div class="w-10 h-10 rounded bg-primary-container/20 border border-primary/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="bolt">bolt</span>
+</div>
+<div>
+<p class="font-label-sm text-on-surface">Instant Provisioning</p>
+<p class="text-[10px] text-on-surface-variant">Under 45 seconds average</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar for Mobile -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface-container/70 backdrop-blur-xl border-t border-white/20 rounded-t-xl shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+<div class="flex justify-around items-center h-xl px-md pb-safe">
+<a class="flex items-center justify-center bg-primary-container text-on-primary-container rounded-full p-3 shadow-[0_0_15px_rgba(122,34,255,0.5)] active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="language">language</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="admin_panel_settings">admin_panel_settings</span>
+</a>
+</div>
+</nav>
+<!-- Atmosphere Effects (Floating Orbs) -->
+<div class="fixed top-1/4 -left-32 w-64 h-64 bg-primary/10 blur-[120px] rounded-full pointer-events-none z-0"></div>
+<div class="fixed bottom-1/4 -right-32 w-96 h-96 bg-tertiary/10 blur-[150px] rounded-full pointer-events-none z-0"></div>
+<script>
+        // Micro-interaction for the orb/button
+        document.querySelector('button.neon-glow-primary').addEventListener('click', function() {
+            this.innerHTML = `
+                <span class="flex items-center justify-center gap-sm">
+                    <span class="material-symbols-outlined animate-spin" data-icon="settings_slow_motion">settings_slow_motion</span>
+                    Connecting to Node...
+                </span>
+            `;
+            setTimeout(() => {
+                alert('Provisioning started. Check log console for progress.');
+                window.location.reload();
+            }, 2000);
+        });
+
+        // Simple input focus effects
+        const inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.querySelector('.material-symbols-outlined').style.color = '#d2bcff';
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.querySelector('.material-symbols-outlined').style.color = '#ccc2d9';
+            });
+        });
+    </script>
+</body></html>

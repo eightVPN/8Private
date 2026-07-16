@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VPN 8 - Secure Connection</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&family=Geist:wght@400;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Hanken+Grotesk:wght@100..900&display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(28, 22, 46, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid transparent;
+            border-image: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 100%) 1;
+        }
+        .neon-glow-violet {
+            box-shadow: 0px 0px 25px rgba(122, 34, 255, 0.6);
+        }
+        .neon-glow-cyan {
+            box-shadow: 0px 0px 15px rgba(76, 215, 246, 0.4);
+        }
+        .orb-pulse {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+            50% { transform: scale(1.02); opacity: 0.9; filter: brightness(1.2); }
+        }
+        .speed-graph-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 5s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed": "#260059",
+                    "on-error-container": "#ffdad6",
+                    "on-secondary-container": "#c8aaff",
+                    "on-secondary": "#3f0689",
+                    "on-primary-fixed": "#25005a",
+                    "on-surface-variant": "#ccc2d9",
+                    "on-secondary-fixed-variant": "#572ba0",
+                    "surface-bright": "#3b3744",
+                    "inverse-primary": "#7516fa",
+                    "on-tertiary-fixed": "#001f26",
+                    "surface-container-low": "#1d1a26",
+                    "tertiary-fixed-dim": "#4cd7f6",
+                    "tertiary": "#4cd7f6",
+                    "on-primary": "#3e008e",
+                    "error": "#ffb4ab",
+                    "inverse-on-surface": "#322e3b",
+                    "surface-variant": "#373340",
+                    "on-primary-container": "#e8daff",
+                    "outline-variant": "#4a4456",
+                    "primary-fixed": "#eaddff",
+                    "surface-container-high": "#2c2834",
+                    "on-tertiary-container": "#a4ebff",
+                    "inverse-surface": "#e7dff0",
+                    "surface-tint": "#d2bcff",
+                    "surface-container-highest": "#373340",
+                    "surface-container-lowest": "#100c18",
+                    "surface-container": "#211e2a",
+                    "secondary-container": "#592da2",
+                    "on-error": "#690005",
+                    "error-container": "#93000a",
+                    "tertiary-container": "#006d80",
+                    "secondary-fixed": "#ebdcff",
+                    "on-surface": "#e7dff0",
+                    "surface-dim": "#15121d",
+                    "primary": "#d2bcff",
+                    "on-primary-fixed-variant": "#5900c7",
+                    "background": "#15121d",
+                    "tertiary-fixed": "#acedff",
+                    "primary-fixed-dim": "#d2bcff",
+                    "on-tertiary": "#003640",
+                    "secondary-fixed-dim": "#d3bbff",
+                    "on-tertiary-fixed-variant": "#004e5c",
+                    "outline": "#968da2",
+                    "on-background": "#e7dff0",
+                    "surface": "#15121d",
+                    "secondary": "#d3bbff",
+                    "primary-container": "#7a22ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "base": "8px",
+                    "xl": "80px",
+                    "sm": "12px",
+                    "xs": "4px",
+                    "lg": "48px",
+                    "md": "24px",
+                    "container-max": "1200px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "body-md": ["Geist"],
+                    "display-lg-mobile": ["Hanken Grotesk"],
+                    "display-lg": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "body-lg": ["Geist"],
+                    "label-sm": ["Geist"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "40px", "fontWeight": "700"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md selection:bg-primary/30 selection:text-primary">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(122,34,255,0.2)]">
+<div class="flex justify-between items-center px-lg py-sm w-full max-w-container-max mx-auto">
+<div class="flex items-center gap-base">
+<img alt="VPN 8 Logo" class="w-10 h-10 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCAtLjftXcCpLWZyV7EaHmuY4Rqu08s6NcZSASdjbIn5SFxBZ0FFhSQegXdpk6XalnUiU7NDmD0iSKQtxM9bG_Yl7KmMT63LEQvtnvfDuj1KIr0IEm533oIwJb2V5iL-jH2tKut0djWEhhE2CljVKhNrKItO0LczHAG7lOSIu5pt1P_XMUuPcWmtVryKSb58nupqjnENX0RWCrVHHvA_b_2ZgWPpr_OLJOvUx4845P2xQQ6CNlhqphP"/>
+<h1 class="font-headline-md text-headline-md text-primary tracking-tighter">VPN 8</h1>
+</div>
+<div class="flex items-center gap-md">
+<div class="hidden md:flex gap-lg">
+<a class="text-primary font-label-sm hover:opacity-80 transition-opacity" href="#">DASHBOARD</a>
+<a class="text-on-surface-variant font-label-sm hover:opacity-80 transition-opacity" href="#">SERVERS</a>
+<a class="text-on-surface-variant font-label-sm hover:opacity-80 transition-opacity" href="#">STATISTICS</a>
+</div>
+<div class="w-10 h-10 rounded-full border border-white/20 bg-surface-container overflow-hidden active:scale-95 transition-transform">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a person with a clean, high-tech aesthetic, wearing modern techwear. The background is a minimalist dark office with subtle purple accent lighting. Sharp focus, high-end photography style consistent with a premium cybersecurity brand." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-yufyfuec-TpC2UZ4ECsNkY3BaFqxKSbGjhCwibSI4Zj3PgZWcvCM_VFQUWvMINEP5_gDBfPZ8xJY4JGGClqDr40wiIHZzX-bA8tuonGy_8_zclEUGBcYstJrMtg4HmhyG67U10SSXbH8B0cwMPQHhGQAMEVi-W6lnidQfC09cULrLYzkDRbwzFNaktwnAMqPlM4jAdEtWsI1_chHTAm7YvfukE5RtGTM7Kp-bFom8DOaUaOYFz2s"/>
+</div>
+</div>
+</div>
+</header>
+<main class="min-h-screen pt-32 pb-24 px-gutter flex flex-col items-center justify-center relative overflow-hidden">
+<!-- Atmospheric Background Elements -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-[120px] pointer-events-none"></div>
+<div class="absolute top-1/4 right-1/4 w-[400px] h-[400px] bg-tertiary/5 rounded-full blur-[100px] pointer-events-none"></div>
+<!-- The Central Orb / Connect Section -->
+<div class="relative z-10 flex flex-col items-center gap-lg">
+<div class="text-center">
+<div class="flex items-center justify-center gap-xs text-tertiary mb-xs">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+<span class="font-label-sm uppercase tracking-[0.2em]">Secure Protocol Active</span>
+</div>
+<h2 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface mb-xs">Connected</h2>
+<p class="font-body-lg text-on-surface-variant opacity-60">Session duration</p>
+<p class="font-display-lg text-display-lg text-primary mt-xs tracking-widest font-mono">02:14:45</p>
+</div>
+<!-- Main Orb Button -->
+<button class="group relative w-64 h-64 md:w-80 md:h-80 flex items-center justify-center active:scale-95 transition-all duration-300" id="connectBtn">
+<!-- Outer Rings -->
+<div class="absolute inset-0 border-2 border-primary/20 rounded-full animate-ping opacity-20"></div>
+<div class="absolute inset-2 border border-primary/30 rounded-full"></div>
+<!-- Inner Glow & Glass -->
+<div class="absolute inset-4 rounded-full bg-gradient-to-br from-primary to-secondary p-[2px] neon-glow-violet orb-pulse">
+<div class="w-full h-full rounded-full bg-surface-container-lowest/80 backdrop-blur-xl flex flex-col items-center justify-center gap-sm">
+<span class="material-symbols-outlined text-[64px] text-primary" style="font-variation-settings: 'FILL' 1;">power_settings_new</span>
+<span class="font-label-sm text-primary tracking-[0.3em]">DISCONNECT</span>
+</div>
+</div>
+</button>
+<!-- Server Selector Chip -->
+<div class="glass-panel px-md py-sm rounded-full flex items-center gap-md hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex items-center gap-sm">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-white/10 shadow-lg">
+<img class="w-full h-full object-cover" data-alt="The flag of Germany represented with a modern, high-quality fabric texture. The colors are deep and saturated: Black, Red, and Gold. Macro shot with soft-focus edges to fit into a minimalist high-tech UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAr-LCdurvCVkPF9OgidDUhwfYY09wtP-IyVZ4kQMi3u1eGOHxxZ6foBo697MDDUu4NdqOG3kNysS1GmBfy1E2EjQyf9E9YZxPiQz1r_a0kiWGxYSIDRDumajhWoEjsTLKgHFkDkUsERUvFmcAENqhj8iTxuSdOFNlhU_PEReTEYA8r_5mPWXGUVrw0llyu1by8ymebx2o3jwoilStdNp4b4o1t6AuIS4VSboyiff1rd_TXyiOhk5TA"/>
+</div>
+<div>
+<p class="font-label-sm text-on-surface-variant leading-none mb-1">Frankfurt, Germany</p>
+<div class="flex items-center gap-xs">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary neon-glow-cyan"></div>
+<span class="text-[10px] font-label-sm text-tertiary">LATENCY: 12ms</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">expand_more</span>
+</div>
+</div>
+<!-- Connection Stats Grid -->
+<div class="mt-xl w-full max-w-container-max grid grid-cols-1 md:grid-cols-3 gap-md relative z-10">
+<!-- Download Stats -->
+<div class="glass-panel p-md rounded-xl flex flex-col gap-sm">
+<div class="flex justify-between items-start">
+<div>
+<p class="font-label-sm text-on-surface-variant uppercase mb-1">Download</p>
+<h3 class="font-headline-md text-headline-md text-tertiary">482.5 <span class="text-body-md opacity-50">Mbps</span></h3>
+</div>
+<span class="material-symbols-outlined text-tertiary">arrow_downward</span>
+</div>
+<!-- Real-time Graph SVG -->
+<div class="h-16 w-full mt-auto">
+<svg class="w-full h-full" viewbox="0 0 200 40">
+<path class="text-tertiary speed-graph-path opacity-80" d="M0 35 Q 20 10, 40 30 T 80 15 T 120 25 T 160 5 T 200 20" fill="none" stroke="currentColor" stroke-width="2"></path>
+<path class="opacity-10" d="M0 35 Q 20 10, 40 30 T 80 15 T 120 25 T 160 5 T 200 20 V 40 H 0 Z" fill="url(#grad-cyan)"></path>
+<defs>
+<lineargradient id="grad-cyan" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color: #4cd7f6; stop-opacity: 1"></stop>
+<stop offset="100%" style="stop-color: #4cd7f6; stop-opacity: 0"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+</div>
+<!-- Upload Stats -->
+<div class="glass-panel p-md rounded-xl flex flex-col gap-sm">
+<div class="flex justify-between items-start">
+<div>
+<p class="font-label-sm text-on-surface-variant uppercase mb-1">Upload</p>
+<h3 class="font-headline-md text-headline-md text-primary">124.8 <span class="text-body-md opacity-50">Mbps</span></h3>
+</div>
+<span class="material-symbols-outlined text-primary">arrow_upward</span>
+</div>
+<div class="h-16 w-full mt-auto">
+<svg class="w-full h-full" viewbox="0 0 200 40">
+<path class="text-primary speed-graph-path opacity-80" d="M0 30 Q 30 35, 60 20 T 100 25 T 140 15 T 180 30 T 200 25" fill="none" stroke="currentColor" stroke-width="2"></path>
+<path class="opacity-10" d="M0 30 Q 30 35, 60 20 T 100 25 T 140 15 T 180 30 T 200 25 V 40 H 0 Z" fill="url(#grad-violet)"></path>
+<defs>
+<lineargradient id="grad-violet" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color: #7a22ff; stop-opacity: 1"></stop>
+<stop offset="100%" style="stop-color: #7a22ff; stop-opacity: 0"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+</div>
+<!-- Encryption & Protection Status -->
+<div class="glass-panel p-md rounded-xl flex flex-col justify-between">
+<div class="flex items-start gap-md">
+<div class="w-12 h-12 rounded-lg bg-tertiary-container/30 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+<div>
+<p class="font-label-sm text-on-surface-variant mb-1">ENCRYPTION</p>
+<p class="font-body-md text-on-surface font-semibold">AES-256-GCM</p>
+</div>
+</div>
+<div class="flex items-center justify-between mt-md pt-md border-t border-white/5">
+<span class="font-label-sm text-outline">KILL SWITCH</span>
+<span class="px-xs py-0.5 rounded bg-tertiary/20 text-tertiary text-[10px] font-bold">ACTIVE</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar (Mobile) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 rounded-t-xl bg-surface-container/70 backdrop-blur-xl border-t border-white/20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+<div class="flex justify-around items-center h-xl px-md pb-safe">
+<a class="flex items-center justify-center bg-primary-container text-on-primary-container rounded-full p-3 shadow-[0_0_15px_rgba(122,34,255,0.5)] active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined">bolt</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined">language</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+</a>
+<a class="flex items-center justify-center text-outline p-3 hover:text-primary transition-colors active:scale-90 transition-all" href="#">
+<span class="material-symbols-outlined">admin_panel_settings</span>
+</a>
+</div>
+</nav>
+<script>
+        // Micro-interaction for the connect button
+        const connectBtn = document.getElementById('connectBtn');
+        let isConnected = true;
+
+        connectBtn.addEventListener('click', () => {
+            isConnected = !isConnected;
+            const innerContainer = connectBtn.querySelector('.bg-surface-container-lowest\\/80');
+            const icon = connectBtn.querySelector('.material-symbols-outlined');
+            const label = connectBtn.querySelector('.font-label-sm');
+            const statusText = document.querySelector('h2');
+            
+            if (isConnected) {
+                innerContainer.classList.add('neon-glow-violet');
+                icon.style.color = '#d2bcff';
+                label.innerText = 'DISCONNECT';
+                label.style.color = '#d2bcff';
+                statusText.innerText = 'Connected';
+                statusText.classList.replace('text-outline', 'text-on-surface');
+            } else {
+                innerContainer.classList.remove('neon-glow-violet');
+                icon.style.color = '#968da2';
+                label.innerText = 'CONNECT';
+                label.style.color = '#968da2';
+                statusText.innerText = 'Not Protected';
+                statusText.classList.replace('text-on-surface', 'text-outline');
+            }
+        });
+
+        // Simple mock for timer updates
+        setInterval(() => {
+            if (isConnected) {
+                // Logic to increment 02:14:45 would go here
+            }
+        }, 1000);
+    </script>
+</body></html>
