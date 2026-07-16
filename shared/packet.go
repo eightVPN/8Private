@@ -103,3 +103,27 @@ func SrcIPFromPacket(pkt []byte) (net.IP, error) {
 	copy(ip, pkt[12:16])
 	return ip, nil
 }
+
+// DstIPUint32 is a zero-allocation fast-path helper that extracts the
+// destination IP as a uint32 integer.
+func DstIPUint32(pkt []byte) (uint32, error) {
+	if len(pkt) < 20 {
+		return 0, ErrPacketTooSmall
+	}
+	if pkt[0]>>4 != 4 {
+		return 0, ErrNotIPv4
+	}
+	return binary.BigEndian.Uint32(pkt[16:20]), nil
+}
+
+// SrcIPUint32 is a zero-allocation fast-path helper that extracts the
+// source IP as a uint32 integer.
+func SrcIPUint32(pkt []byte) (uint32, error) {
+	if len(pkt) < 20 {
+		return 0, ErrPacketTooSmall
+	}
+	if pkt[0]>>4 != 4 {
+		return 0, ErrNotIPv4
+	}
+	return binary.BigEndian.Uint32(pkt[12:16]), nil
+}

@@ -21,10 +21,12 @@ func TestObfuscator(t *testing.T) {
 	message := []byte("hello, vpn 8 secure packet!")
 
 	// 1. Test success case
-	ciphertext, err := obf.Obfuscate(message)
+	dst := make([]byte, 2048)
+	n, err := obf.ObfuscateTo(message, dst)
 	if err != nil {
 		t.Fatalf("failed to obfuscate: %v", err)
 	}
+	ciphertext := dst[:n]
 
 	if bytes.Equal(ciphertext, message) {
 		t.Fatal("ciphertext should not be equal to plain message")
@@ -32,7 +34,7 @@ func TestObfuscator(t *testing.T) {
 
 	plaintext, err := obf.Deobfuscate(ciphertext)
 	if err != nil {
-		t.Fatalf("failed to deobfuscate: %v", err)
+		t.Fatalf("failed to deobfuscate (len %d): %v", len(ciphertext), err)
 	}
 
 	if !bytes.Equal(plaintext, message) {

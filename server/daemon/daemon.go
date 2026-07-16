@@ -4,6 +4,7 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -71,7 +72,7 @@ type VPNServer struct {
 	dataPort   int
 	tunDev     shared.TUNDevice
 	ipPool     *IPPool
-	sessions   map[string]*ClientSession // keyed by assigned IP string
+	sessions   map[uint32]*ClientSession // keyed by assigned IP as uint32
 	sessionsMu sync.RWMutex
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -132,7 +133,7 @@ func NewVPNServer(config ServerConfig) (*VPNServer, error) {
 		quicConfig: quicConfig,
 		tunDev:     tunDev,
 		ipPool:     pool,
-		sessions:   make(map[string]*ClientSession),
+		sessions:   make(map[uint32]*ClientSession),
 		ctx:        ctx,
 		cancel:     cancel,
 		natEnabled: config.EnableNAT,
@@ -188,7 +189,7 @@ func NewVPNServerForTest(store *db.Store, psk []byte, cert tls.Certificate) (*VP
 		tlsConfig:  tlsConfig,
 		quicConfig: quicConfig,
 		ipPool:     pool,
-		sessions:   make(map[string]*ClientSession),
+		sessions:   make(map[uint32]*ClientSession),
 		ctx:        ctx,
 		cancel:     cancel,
 		bufPool: sync.Pool{
@@ -377,7 +378,7 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 		cancel:     sessCancel,
 	}
 
-	ipKey := assignedIP.String()
+	ipKey := binary.BigEndian.Uint32(assignedIP.To4())
 	s.sessionsMu.Lock()
 	s.sessions[ipKey] = sess
 	s.sessionsMu.Unlock()
@@ -422,14 +423,13 @@ func (s *VPNServer) dataReadLoop() {
 
 		pkt := buf[:n]
 
-		// Parse source IP from the IPv4 header.
-		srcIP, err := shared.SrcIPFromPacket(pkt)
-		if err != nil || srcIP == nil {
+		// Parse source IP from the IPv4 header as uint32.
+		srcKey, err := shared.SrcIPUint32(pkt)
+		if err != nil {
 			s.bufPool.Put(bufPtr)
 			continue
 		}
 
-		srcKey := srcIP.String()
 		s.sessionsMu.RLock()
 		sess, ok := s.sessions[srcKey]
 		s.sessionsMu.RUnlock()
@@ -479,14 +479,12 @@ func (s *VPNServer) tunReadLoop() {
 
 		pkt := buf[:n]
 
-		// Parse destination IP from the IPv4 header.
-		dstIP, err := shared.DstIPFromPacket(pkt)
-		if err != nil || dstIP == nil {
+		// Parse destination IP from the IPv4 header as uint32.
+		dstKey, err := shared.DstIPUint32(pkt)
+		if err != nil {
 			s.bufPool.Put(bufPtr)
 			continue
 		}
-
-		dstKey := dstIP.String()
 
 		s.sessionsMu.RLock()
 		sess, ok := s.sessions[dstKey]

@@ -42,8 +42,8 @@ func main() {
 	}
 
 	psk, err := hex.DecodeString(pskHex)
-	if err != nil || (len(psk) != 16 && len(psk) != 32) {
-		log.Fatalf("Invalid VPN_PSK hex key (must decode to 16 or 32 bytes): %v", err)
+	if err != nil || len(psk) != 32 {
+		log.Fatalf("Invalid VPN_PSK hex key (must decode to 32 bytes): %v", err)
 	}
 
 	// 2. Initialize Database Store

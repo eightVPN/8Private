@@ -95,8 +95,8 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 
 	psk, err := hex.DecodeString(req.PskHex)
-	if err != nil {
-		http.Error(w, "Invalid PSK hex", http.StatusBadRequest)
+	if err != nil || len(psk) != 32 {
+		http.Error(w, "Invalid PSK hex or not 32 bytes", http.StatusBadRequest)
 		return
 	}
 
