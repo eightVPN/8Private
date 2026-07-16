@@ -76,18 +76,29 @@ OUT_IFACE=\$(ip route show default | awk '/default/ {print \$5}' | head -1)
 if [ -z "\$OUT_IFACE" ]; then OUT_IFACE="eth0"; fi
 echo "      Interface: \$OUT_IFACE"
 
-echo "[5/6] Creating Deployment Configuration..."
-if ! [ -x "\$(command -v git)" ]; then
-    if [ -x "\$(command -v apt-get)" ]; then apt-get install git -y;
-    elif [ -x "\$(command -v yum)" ]; then yum install git -y; fi
+echo "[5/6] Syncing and Configuring..."
+if ! [ -x "$(command -v git)" ]; then
+    if [ -x "$(command -v apt-get)" ]; then apt-get install git -y;
+    elif [ -x "$(command -v yum)" ]; then yum install git -y; fi
 fi
 
 mkdir -p /opt/vpn8/data
 cd /opt/vpn8
+NEEDS_BUILD=true
 if [ ! -d "8Private" ]; then
     git clone https://github.com/eightVPN/8Private.git
 else
-    cd 8Private && git pull && cd ..
+    cd 8Private
+    git fetch
+    LOCAL=\$(git rev-parse HEAD)
+    REMOTE=\$(git rev-parse @{u})
+    if [ "\$LOCAL" = "\$REMOTE" ]; then
+        echo "      No changes detected. Skipping rebuild."
+        NEEDS_BUILD=false
+    else
+        git pull
+    fi
+    cd ..
 fi
 
 cat <<EOF > /opt/vpn8/docker-compose.yml
@@ -123,7 +134,11 @@ EOF
 echo "[6/6] Launching VPN 8 Server..."
 cd /opt/vpn8
 export BUILDKIT_PROGRESS=plain
-docker compose up -d --build
+if [ "\$NEEDS_BUILD" = true ]; then
+    docker compose up -d --build
+else
+    docker compose up -d
+fi
 
 if [ -x "\$(command -v ufw)" ]; then
     echo "      Configuring UFW Firewall..."

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'services/daemon_service.dart';
 
 enum VPNState { disconnected, connecting, connected }
 
@@ -216,8 +216,6 @@ class VPNProvider extends ChangeNotifier {
     }
   }
 
-  static const platform = MethodChannel('com.eightvpn/bridge');
-
   Future<void> connect() async {
     if (_state != VPNState.disconnected || _selectedServer == null) return;
 
@@ -225,14 +223,14 @@ class VPNProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await platform.invokeMethod('startVPN', {
-        'serverAddr': '${_selectedServer!.ip}:51820',
-        'accessKey': 'epn_owner_key_default', // In production, read from activeServer credentials
-        'hwid': 'macos_client', // In production, generate unique HWID
-        'pskHex': '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38'
-      });
+      final success = await DaemonService.connect(
+        '${_selectedServer!.ip}:51820',
+        'epn_owner_key_default', // In production, read from activeServer credentials
+        'macos_client', // In production, generate unique HWID
+        '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38'
+      );
       
-      if (success == true) {
+      if (success) {
         _state = VPNState.connected;
         _sessionDuration = Duration.zero;
         _mode = ConnectionMode.udp;
@@ -251,7 +249,7 @@ class VPNProvider extends ChangeNotifier {
     if (_state != VPNState.connected) return;
 
     try {
-      await platform.invokeMethod('stopVPN');
+      await DaemonService.disconnect();
     } catch (e) {
       print('VPN Disconnect Error: $e');
     }
@@ -261,23 +259,39 @@ class VPNProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Simulates server statistics updates
+  // Simulates server statistics updates and real daemon polling
   void _startSessionMetrics() {
-    _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       _sessionDuration += const Duration(seconds: 1);
+
+      // Poll real status from Daemon
+      final status = await DaemonService.getStatus();
+      if (status['running'] == true) {
+         if (status['activeMode'] == 'TCP') {
+             _mode = ConnectionMode.tcp;
+         } else if (status['activeMode'] == 'UDP') {
+             _mode = ConnectionMode.udp;
+         }
+      } else {
+          // Daemon died or disconnected externally
+          disconnect();
+          return;
+      }
 
       // Random speed fluctuations matching premium speeds
       final r = randDouble(0.8, 1.2);
       _downloadSpeed = 482.5 * r;
       _uploadSpeed = 124.8 * r;
 
-      // Simulate a random UDP Block after 20 seconds, triggering TCP Fallback
-      if (_sessionDuration.inSeconds == 15 && _mode == ConnectionMode.udp) {
-        _triggerTCPFallback();
-      }
-
       notifyListeners();
     });
+  }
+
+  void _stopSessionMetrics() {
+    _sessionTimer?.cancel();
+    _sessionTimer = null;
+    _downloadSpeed = 0.0;
+    _uploadSpeed = 0.0;
   }
 
   void _triggerTCPFallback() {

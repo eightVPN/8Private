@@ -34,4 +34,8 @@ type TUNConfig struct {
 
 	// MTU is the Maximum Transmission Unit. Use DefaultMTU if zero.
 	MTU int
+
+	// ServerIP is the public IP of the VPN server.
+	// Used to configure a direct route bypassing the tunnel.
+	ServerIP net.IP
 }

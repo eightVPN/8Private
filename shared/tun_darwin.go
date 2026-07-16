@@ -84,6 +84,26 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 		return nil, fmt.Errorf("ifconfig %s inet %s %s mtu %s up: %w", ifName, cidrAddr, addr, mtu, err)
 	}
 
+	// 6. Set up default routing
+	if len(cfg.ServerIP) > 0 {
+		serverIPStr := cfg.ServerIP.String()
+		// Find default gateway
+		gwOut, _ := exec.Command("sh", "-c", "route -n get default | awk '/gateway/ {print $2}'").Output()
+		gw := string(gwOut)
+		if len(gw) > 0 && gw[len(gw)-1] == '\n' {
+			gw = gw[:len(gw)-1]
+		}
+
+		if gw != "" {
+			// Route server traffic to original gateway so the encrypted tunnel packets don't loop
+			_ = exec.Command("route", "add", "-host", serverIPStr, gw).Run()
+		}
+
+		// Route all other traffic to utun interface (0.0.0.0/1 and 128.0.0.0/1)
+		_ = exec.Command("route", "add", "-net", "0.0.0.0/1", "-interface", ifName).Run()
+		_ = exec.Command("route", "add", "-net", "128.0.0.0/1", "-interface", ifName).Run()
+	}
+
 	return &darwinTUN{fd: fd, name: ifName}, nil
 }
 

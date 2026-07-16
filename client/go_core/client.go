@@ -311,6 +311,7 @@ func (c *VPNClient) setupTUN(resp *AuthResponse) error {
 		Address: net.ParseIP(resp.AssignedIP),
 		CIDR:    cidr,
 		MTU:     resp.MTU,
+		ServerIP: net.ParseIP(resp.ServerIP),
 	}
 
 	dev, err := shared.CreateTUN(tunConfig)
