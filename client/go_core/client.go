@@ -78,6 +78,24 @@ func (c *VPNClient) GetActiveMode() string {
 	return c.activeMode
 }
 
+func (c *VPNClient) SetCustomTUN(tun shared.TUNDevice) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tunDev = tun
+}
+
+func (c *VPNClient) GetCustomTUN() shared.TUNDevice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.tunDev
+}
+
+func (c *VPNClient) IsRunning() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.running
+}
+
 func (c *VPNClient) Start() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

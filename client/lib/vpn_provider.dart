@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum VPNState { disconnected, connecting, connected }
 
@@ -215,34 +216,48 @@ class VPNProvider extends ChangeNotifier {
     }
   }
 
-  void connect() {
-    if (_state != VPNState.disconnected) return;
+  static const platform = MethodChannel('com.eightvpn/bridge');
+
+  Future<void> connect() async {
+    if (_state != VPNState.disconnected || _selectedServer == null) return;
 
     _state = VPNState.connecting;
     notifyListeners();
 
-    // Simulate connection delay and potential UDP throttling fallback
-    Timer(const Duration(milliseconds: 1500), () {
-      _state = VPNState.connected;
-      _sessionDuration = Duration.zero;
-      _mode = ConnectionMode.udp;
-
-      // Start metrics generator and timer
-      _startSessionMetrics();
-      notifyListeners();
-    });
+    try {
+      final success = await platform.invokeMethod('startVPN', {
+        'serverAddr': '${_selectedServer!.ip}:51820',
+        'accessKey': 'epn_owner_key_default', // In production, read from activeServer credentials
+        'hwid': 'macos_client', // In production, generate unique HWID
+        'pskHex': '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38'
+      });
+      
+      if (success == true) {
+        _state = VPNState.connected;
+        _sessionDuration = Duration.zero;
+        _mode = ConnectionMode.udp;
+        _startSessionMetrics();
+      } else {
+        _state = VPNState.disconnected;
+      }
+    } catch (e) {
+      print('VPN Connection Error: $e');
+      _state = VPNState.disconnected;
+    }
+    notifyListeners();
   }
 
-  void disconnect() {
+  Future<void> disconnect() async {
     if (_state != VPNState.connected) return;
 
+    try {
+      await platform.invokeMethod('stopVPN');
+    } catch (e) {
+      print('VPN Disconnect Error: $e');
+    }
+
     _state = VPNState.disconnected;
-    _downloadSpeed = 0.0;
-    _uploadSpeed = 0.0;
-
-    _sessionTimer?.cancel();
-    _sessionTimer = null;
-
+    _stopSessionMetrics();
     notifyListeners();
   }
 
