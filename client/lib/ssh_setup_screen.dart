@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'theme.dart';
+import 'vpn_provider.dart';
 import 'services/ssh_deploy_service.dart';
 
 class SSHSetupScreen extends StatefulWidget {
@@ -671,8 +673,18 @@ class _SSHSetupScreenState extends State<SSHSetupScreen> {
               _isDeploying = false;
             });
             _scrollToBottom();
-            // On success, we can navigate home or auto-connect
+            // On success, register the server and navigate home
             if (!_deployLogs.any((l) => l.startsWith('> ERROR'))) {
+              final provider = context.read<VPNProvider>();
+              final serverIp = _ipController.text;
+              provider.addServer(ServerProfile(
+                id: 'srv_${DateTime.now().millisecondsSinceEpoch}',
+                name: serverIp,
+                ip: serverIp,
+                port: 51820,
+                accessKey: 'epn_owner_key_default',
+                latencyMs: 0,
+              ));
               Future.delayed(
                 const Duration(seconds: 2),
                 () => widget.onNavigate('home'),

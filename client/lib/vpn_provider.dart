@@ -176,6 +176,24 @@ class VPNProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Add a new server
+  void addServer(ServerProfile server) {
+    _servers.add(server);
+    if (_selectedServer == null) {
+      _selectedServer = server;
+    }
+    notifyListeners();
+  }
+
+  // Remove a server
+  void removeServer(String id) {
+    _servers.removeWhere((s) => s.id == id);
+    if (_selectedServer?.id == id) {
+      _selectedServer = _servers.isNotEmpty ? _servers.first : null;
+    }
+    notifyListeners();
+  }
+
   // Select server
   void selectServer(ServerProfile server) {
     _selectedServer = server;

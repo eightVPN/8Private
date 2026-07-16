@@ -118,8 +118,6 @@ services:
       - DB_PATH=/app/data/vpn8.db
     volumes:
       - ./data:/app/data
-    sysctls:
-      - net.ipv4.ip_forward=1
 EOF
 
 echo "[6/6] Launching VPN 8 Server..."
