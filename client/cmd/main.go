@@ -32,6 +32,8 @@ type ConnectRequest struct {
 type StatusResponse struct {
 	Running    bool   `json:"running"`
 	ActiveMode string `json:"activeMode"`
+	RxBytes    uint64 `json:"rxBytes"`
+	TxBytes    uint64 `json:"txBytes"`
 }
 
 func main() {
@@ -149,6 +151,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if globalClient != nil && globalClient.IsRunning() {
 		resp.Running = true
 		resp.ActiveMode = globalClient.GetActiveMode()
+		resp.RxBytes = globalClient.GetRxBytes()
+		resp.TxBytes = globalClient.GetTxBytes()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

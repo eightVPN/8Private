@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:uuid/uuid.dart';
 import 'services/daemon_service.dart';
 
 enum VPNState { disconnected, connecting, connected }
@@ -70,11 +72,21 @@ class VPNProvider extends ChangeNotifier {
   double _uploadSpeed = 0.0;
   int _latency = 12;
 
+  int _lastRxBytes = 0;
+  int _lastTxBytes = 0;
+
+  final List<FlSpot> _downloadHistory = [];
+  final List<FlSpot> _uploadHistory = [];
+  double _historyTime = 0.0;
+
   Timer? _sessionTimer;
   Duration _sessionDuration = Duration.zero;
 
   ServerProfile? _selectedServer;
   List<ServerProfile> _servers = [];
+
+  String _hwid = '';
+  String _pskHex = '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38';
 
   // Administration State
   final List<VPNUser> _users = [];
@@ -110,6 +122,14 @@ class VPNProvider extends ChangeNotifier {
 
   Future<void> _loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    _hwid = prefs.getString('hwid') ?? const Uuid().v4();
+    _pskHex = prefs.getString('pskHex') ?? '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38';
+    
+    // Ensure we save generated defaults
+    await prefs.setString('hwid', _hwid);
+    await prefs.setString('pskHex', _pskHex);
+
     final serversJson = prefs.getStringList('servers');
     if (serversJson != null) {
       _servers = serversJson
@@ -126,6 +146,14 @@ class VPNProvider extends ChangeNotifier {
     } else if (_servers.isNotEmpty) {
       _selectedServer = _servers.first;
     }
+    
+    // Initialize graph history
+    for (int i = 0; i < 60; i++) {
+      _downloadHistory.add(FlSpot(i.toDouble(), 0));
+      _uploadHistory.add(FlSpot(i.toDouble(), 0));
+    }
+    _historyTime = 59.0;
+    
     notifyListeners();
   }
 
@@ -143,6 +171,8 @@ class VPNProvider extends ChangeNotifier {
   ConnectionMode get mode => _mode;
   double get downloadSpeed => _downloadSpeed;
   double get uploadSpeed => _uploadSpeed;
+  List<FlSpot> get downloadHistory => _downloadHistory;
+  List<FlSpot> get uploadHistory => _uploadHistory;
   int get latency => _latency;
   Duration get sessionDuration => _sessionDuration;
   ServerProfile? get selectedServer => _selectedServer;
@@ -275,10 +305,10 @@ class VPNProvider extends ChangeNotifier {
 
     try {
       final success = await DaemonService.connect(
-        '${_selectedServer!.ip}:51820',
-        'epn_owner_key_default', // In production, read from activeServer credentials
-        'macos_client', // In production, generate unique HWID
-        '43484f4f53455f415f5345435552455f50534b5f4b45595f544f5f5553455f38'
+        '${_selectedServer!.ip}:${_selectedServer!.port}',
+        _selectedServer!.accessKey,
+        _hwid,
+        _pskHex
       );
       
       if (success) {
@@ -329,10 +359,29 @@ class VPNProvider extends ChangeNotifier {
           return;
       }
 
-      // Random speed fluctuations matching premium speeds
-      final r = randDouble(0.8, 1.2);
-      _downloadSpeed = 482.5 * r;
-      _uploadSpeed = 124.8 * r;
+      // Read real traffic bytes
+      final rxBytes = (status['rxBytes'] as int?) ?? 0;
+      final txBytes = (status['txBytes'] as int?) ?? 0;
+
+      // Calculate speed (bytes per second -> megabits per second)
+      final rxDelta = rxBytes - _lastRxBytes;
+      final txDelta = txBytes - _lastTxBytes;
+      
+      _lastRxBytes = rxBytes;
+      _lastTxBytes = txBytes;
+
+      // Only calculate if not first tick
+      if (_sessionDuration.inSeconds > 1) {
+          _downloadSpeed = (rxDelta * 8) / 1000000;
+          _uploadSpeed = (txDelta * 8) / 1000000;
+      }
+
+      _historyTime += 1;
+      _downloadHistory.add(FlSpot(_historyTime, _downloadSpeed));
+      if (_downloadHistory.length > 60) _downloadHistory.removeAt(0);
+
+      _uploadHistory.add(FlSpot(_historyTime, _uploadSpeed));
+      if (_uploadHistory.length > 60) _uploadHistory.removeAt(0);
 
       notifyListeners();
     });
@@ -343,6 +392,12 @@ class VPNProvider extends ChangeNotifier {
     _sessionTimer = null;
     _downloadSpeed = 0.0;
     _uploadSpeed = 0.0;
+    _lastRxBytes = 0;
+    _lastTxBytes = 0;
+    for (int i = 0; i < 60; i++) {
+        _downloadHistory[i] = FlSpot(_downloadHistory[i].x, 0);
+        _uploadHistory[i] = FlSpot(_uploadHistory[i].x, 0);
+    }
   }
 
   void _triggerTCPFallback() {

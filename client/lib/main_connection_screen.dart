@@ -2,8 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:internet_speed_test/internet_speed_test.dart';
-import 'package:internet_speed_test/callbacks_enum.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'theme.dart';
 import 'vpn_provider.dart';
 
@@ -544,108 +543,32 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
     );
   }
 
-  bool _isSpeedTesting = false;
-  double _testDownloadSpeed = 0.0;
-  double _testUploadSpeed = 0.0;
-  final _internetSpeedTest = InternetSpeedTest();
-
-  void _startSpeedTest() {
-    setState(() {
-      _isSpeedTesting = true;
-      _testDownloadSpeed = 0.0;
-      _testUploadSpeed = 0.0;
-    });
-
-    _internetSpeedTest.startDownloadTesting(
-      onDone: (double transferRate, SpeedUnit unit) {
-        setState(() {
-          _testDownloadSpeed = transferRate;
-        });
-        // Start upload testing after download finishes
-        _internetSpeedTest.startUploadTesting(
-          onDone: (double transferRate, SpeedUnit unit) {
-            setState(() {
-              _testUploadSpeed = transferRate;
-              _isSpeedTesting = false;
-            });
-          },
-          onProgress: (double percent, double transferRate, SpeedUnit unit) {
-            setState(() {
-              _testUploadSpeed = transferRate;
-            });
-          },
-          onError: (String errorMessage, String speedTestError) {
-            setState(() => _isSpeedTesting = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload test failed: $errorMessage')),
-            );
-          },
-        );
-      },
-      onProgress: (double percent, double transferRate, SpeedUnit unit) {
-        setState(() {
-          _testDownloadSpeed = transferRate;
-        });
-      },
-      onError: (String errorMessage, String speedTestError) {
-        setState(() => _isSpeedTesting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Download test failed: $errorMessage')),
-        );
-      },
-    );
-  }
 
   Widget _buildStatsSection(VPNProvider provider, bool isConnected) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Speed Test Button
-          if (isConnected && !_isSpeedTesting)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: ElevatedButton.icon(
-                onPressed: _startSpeedTest,
-                icon: const Icon(Icons.speed),
-                label: const Text('Run Speed Test'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryContainer,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          if (_isSpeedTesting)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            ),
           // Download card
           _buildSpeedCard(
             label: 'DOWNLOAD',
-            value: isConnected
-                ? (_isSpeedTesting || _testDownloadSpeed > 0 ? _testDownloadSpeed.toStringAsFixed(1) : provider.downloadSpeed.toStringAsFixed(1))
-                : '0.0',
+            value: isConnected ? provider.downloadSpeed.toStringAsFixed(1) : '0.0',
             icon: Icons.arrow_downward,
             color: AppColors.tertiary,
             gradientId: 'cyan',
+            history: provider.downloadHistory,
+            isConnected: isConnected,
           ),
           const SizedBox(height: 16),
           // Upload card
           _buildSpeedCard(
             label: 'UPLOAD',
-            value: isConnected
-                ? (_isSpeedTesting || _testUploadSpeed > 0 ? _testUploadSpeed.toStringAsFixed(1) : provider.uploadSpeed.toStringAsFixed(1))
-                : '0.0',
+            value: isConnected ? provider.uploadSpeed.toStringAsFixed(1) : '0.0',
             icon: Icons.arrow_upward,
             color: AppColors.primary,
             gradientId: 'violet',
+            history: provider.uploadHistory,
+            isConnected: isConnected,
           ),
           const SizedBox(height: 16),
           // Encryption card
@@ -661,6 +584,8 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
     required IconData icon,
     required Color color,
     required String gradientId,
+    required List<FlSpot> history,
+    required bool isConnected,
   }) {
     return GlassPanel(
       padding: const EdgeInsets.all(24),
@@ -718,9 +643,31 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
           const SizedBox(height: 16),
           SizedBox(
             height: 64,
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _WaveGraphPainter(color: color),
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                minX: history.isNotEmpty ? history.first.x : 0,
+                maxX: history.isNotEmpty ? history.last.x : 60,
+                minY: 0,
+                maxY: (history.isNotEmpty && history.map((s) => s.y).reduce((a, b) => a > b ? a : b) > 10) 
+                      ? history.map((s) => s.y).reduce((a, b) => a > b ? a : b) * 1.2 : 10,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: history,
+                    isCurved: true,
+                    color: color,
+                    barWidth: 2,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: color.withAlpha(50),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -763,7 +710,7 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'AES-256-GCM',
+                    'XChaCha20-Poly1305',
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -892,59 +839,3 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
   }
 }
 
-class _WaveGraphPainter extends CustomPainter {
-  final Color color;
-
-  _WaveGraphPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    final path = Path();
-    final w = size.width;
-    final h = size.height;
-
-    path.moveTo(0, h * 0.7);
-    path.cubicTo(w * 0.1, h * 0.2, w * 0.2, h * 0.8, w * 0.3, h * 0.4);
-    path.cubicTo(w * 0.4, h * 0.1, w * 0.5, h * 0.6, w * 0.6, h * 0.3);
-    path.cubicTo(w * 0.7, h * 0.0, w * 0.8, h * 0.5, w * 0.9, h * 0.2);
-    path.cubicTo(w * 0.95, h * 0.1, w, h * 0.5, w, h * 0.4);
-
-    canvas.drawPath(path, paint);
-
-    // Fill gradient below the wave
-    final fillPath = Path.from(path);
-    fillPath.lineTo(w, h);
-    fillPath.lineTo(0, h);
-    fillPath.close();
-
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color.fromRGBO(
-            (color.r * 255).round(),
-            (color.g * 255).round(),
-            (color.b * 255).round(),
-            0.15,
-          ),
-          Color.fromRGBO(
-            (color.r * 255).round(),
-            (color.g * 255).round(),
-            (color.b * 255).round(),
-            0.0,
-          ),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-
-    canvas.drawPath(fillPath, fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -56,6 +57,8 @@ type VPNClient struct {
 	onModeChange func(mode string)
 	running      bool
 	cancel       context.CancelFunc
+	rxBytes      uint64
+	txBytes      uint64
 }
 
 func NewVPNClient(serverAddr string, accessKey string, hwid string, psk []byte) *VPNClient {
@@ -78,6 +81,14 @@ func (c *VPNClient) GetActiveMode() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.activeMode
+}
+
+func (c *VPNClient) GetRxBytes() uint64 {
+	return atomic.LoadUint64(&c.rxBytes)
+}
+
+func (c *VPNClient) GetTxBytes() uint64 {
+	return atomic.LoadUint64(&c.txBytes)
 }
 
 func (c *VPNClient) SetCustomTUN(tun shared.TUNDevice) {
@@ -365,6 +376,7 @@ func (c *VPNClient) tunToUdpLoop(ctx context.Context, serverAddr *net.UDPAddr) {
 			log.Printf("UDP WriteTo error: %v", err)
 			return
 		}
+		atomic.AddUint64(&c.txBytes, uint64(n))
 	}
 }
 
@@ -382,6 +394,7 @@ func (c *VPNClient) udpToTunLoop(ctx context.Context) {
 			log.Printf("UDP ReadFrom error: %v", err)
 			return
 		}
+		atomic.AddUint64(&c.rxBytes, uint64(n))
 
 		if c.tunDev != nil {
 			if _, err := c.tunDev.Write(buf[:n]); err != nil {
