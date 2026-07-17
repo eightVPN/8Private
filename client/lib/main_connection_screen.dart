@@ -469,76 +469,93 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
     );
   }
 
+  void _showServerSelection(BuildContext context, VPNProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return _ServerSelectionModal(
+          provider: provider,
+          onNavigate: widget.onNavigate,
+        );
+      },
+    );
+  }
+
   Widget _buildServerChip(VPNProvider provider) {
     final server = provider.selectedServer;
-    return GlassPanel(
-      borderRadius: 100,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Flag placeholder
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: AppColors.surfaceContainerHigh,
-              border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1)),
+    return GestureDetector(
+      onTap: () => _showServerSelection(context, provider),
+      child: GlassPanel(
+        borderRadius: 100,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Flag placeholder
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.surfaceContainerHigh,
+                border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1)),
+              ),
+              child: const Icon(
+                Icons.flag,
+                size: 16,
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
-            child: const Icon(
-              Icons.flag,
-              size: 16,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                server?.name ?? 'Select Server',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurfaceVariant,
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  server?.name ?? 'Select Server',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.onSurfaceVariant,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.tertiary,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color.fromRGBO(76, 215, 246, 0.4),
-                          blurRadius: 6,
-                        ),
-                      ],
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.tertiary,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color.fromRGBO(76, 215, 246, 0.4),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'LATENCY: ${provider.latency}ms',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.tertiary,
+                    const SizedBox(width: 4),
+                    Text(
+                      'LATENCY: ${provider.latency}ms',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.tertiary,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          const Icon(Icons.expand_more, color: AppColors.outline, size: 20),
-        ],
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            const Icon(Icons.expand_more, color: AppColors.outline, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -839,3 +856,263 @@ class _MainConnectionScreenState extends State<MainConnectionScreen>
   }
 }
 
+class _ServerSelectionModal extends StatelessWidget {
+  final VPNProvider provider;
+  final Function(String) onNavigate;
+
+  const _ServerSelectionModal({
+    required this.provider,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(24, 16, 24, 24 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 48,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Select Server',
+                style: GoogleFonts.hankenGrotesk(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: AppColors.outline),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (provider.servers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Column(
+                children: [
+                  const Icon(Icons.dns, size: 48, color: AppColors.outline),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No servers added yet.',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Flexible(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.4,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: provider.servers.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final server = provider.servers[index];
+                    final isSelected = provider.selectedServer?.id == server.id;
+                    return GestureDetector(
+                      onTap: () {
+                        provider.selectServer(server);
+                        Navigator.pop(context);
+                      },
+                      child: GlassPanel(
+                        backgroundColor: isSelected
+                            ? AppColors.primaryContainer.withOpacity(0.15)
+                            : AppColors.surfaceContainerLow,
+                        borderColor: isSelected
+                            ? AppColors.primary
+                            : AppColors.glassBorder,
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected
+                                    ? AppColors.primaryContainer
+                                    : AppColors.surfaceContainerHigh,
+                              ),
+                              child: Icon(
+                                Icons.dns,
+                                color: isSelected
+                                    ? AppColors.onPrimaryContainer
+                                    : AppColors.onSurfaceVariant,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    server.name,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${server.ip}:${server.port}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: AppColors.tertiary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${server.latencyMs}ms',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.tertiary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    provider.removeServer(server.id);
+                                  },
+                                  child: const Icon(
+                                    Icons.delete_outline,
+                                    color: AppColors.error,
+                                    size: 18,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryContainer,
+              foregroundColor: AppColors.onPrimaryContainer,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              onNavigate('setup');
+            },
+            icon: const Icon(Icons.add),
+            label: Text(
+              'Add New Server',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: AppColors.surfaceContainer,
+                  title: const Text('Reset Application Data?'),
+                  content: const Text(
+                    'This will disconnect the VPN, delete all saved servers, and reset all credentials to default. Are you sure?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Reset Everything'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                Navigator.pop(context);
+                await provider.clearAllData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('All application data cleared.'),
+                    backgroundColor: AppColors.surfaceContainerHigh,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.restore, size: 18),
+            label: Text(
+              'Reset App Data',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

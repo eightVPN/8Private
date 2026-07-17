@@ -404,6 +404,16 @@ class VPNProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearAllData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    _servers.clear();
+    _selectedServer = null;
+    _users.clear();
+    await disconnect();
+    await _loadFromPrefs();
+  }
+
   // Simulates server statistics updates and real daemon polling
   void _startSessionMetrics() {
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
