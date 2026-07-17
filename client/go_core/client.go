@@ -199,11 +199,11 @@ func (c *VPNClient) connectionWatcher(ctx context.Context) {
 					time.Sleep(5 * time.Second)
 					continue
 				}
+			} else {
+				// Wait a moment before reconnecting if the UDP connection gracefully dropped
+				time.Sleep(2 * time.Second)
 			}
 
-			// Block until connection is lost or context cancelled
-			<-ctx.Done()
-			return
 		}
 	}
 }
@@ -212,12 +212,11 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 	tlsConfig := &tls.Config{
 		ServerName:         c.selectRandomSNI(),
 		InsecureSkipVerify: true,
-		NextProtos:         []string{"h3"},
+		NextProtos:         []string{"vpn8-quic"},
 	}
 
 	quicConfig := &quic.Config{
-		EnableDatagrams:      true,
-		HandshakeIdleTimeout: 5 * time.Second,
+		KeepAlivePeriod: 15 * time.Second,
 	}
 
 	log.Printf("Attempting QUIC auth to server %s (SNI: %s)...", c.serverAddr, tlsConfig.ServerName)
@@ -272,13 +271,16 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 	go c.tunToUdpLoop(ctx, dataServerAddr)
 	go c.udpToTunLoop(ctx)
 
-	// Keep connection alive
-	go func() {
-		<-ctx.Done()
+	// Block until connection drops or context is cancelled
+	select {
+	case <-ctx.Done():
 		conn.CloseWithError(0, "context cancelled")
-	}()
+		return ctx.Err()
+	case <-conn.Context().Done():
+		log.Printf("QUIC connection lost, reconnecting...")
+		return errors.New("connection lost")
+	}
 
-	return nil
 }
 
 // connectTCP provides uTLS-based fallback if UDP is blocked.
@@ -327,8 +329,8 @@ func (c *VPNClient) SetTUN(dev shared.TUNDevice) {
 func (c *VPNClient) setupTUN(resp *AuthResponse) error {
 	c.mu.Lock()
 	if c.tunDev != nil {
-		c.mu.Unlock()
-		return nil
+		c.tunDev.Close()
+		c.tunDev = nil
 	}
 	c.mu.Unlock()
 

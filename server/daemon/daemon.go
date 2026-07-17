@@ -448,8 +448,11 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 	}()
 
 	// The client's QUIC connection remains open for control messages and keep-alives.
-	// We wait until the context is cancelled (client disconnects).
-	<-sessCtx.Done()
+	// We wait until the context is cancelled (server shutdown) or the connection is closed (client disconnects).
+	select {
+	case <-sessCtx.Done():
+	case <-conn.Context().Done():
+	}
 }
 
 // dataReadLoop reads raw UDP packets from dataConn (decrypted via Obfuscator),

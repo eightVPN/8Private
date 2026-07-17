@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -28,6 +29,43 @@ const (
 // packet written to a utun interface on macOS. The kernel requires this
 // to be in NativeEndian (Host Byte Order).
 var afIPv4Header [afHeaderSize]byte
+
+// globalPrimaryService caches the primary network service UUID so it can be restored on close.
+var globalPrimaryService string
+
+func applyDNSOverride() {
+	cmd := exec.Command("scutil")
+	cmd.Stdin = strings.NewReader("show State:/Network/Global/IPv4\n")
+	if out, err := cmd.Output(); err == nil {
+		lines := strings.Split(string(out), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "PrimaryService") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					ps := strings.TrimSpace(parts[1])
+					if ps != "" {
+						globalPrimaryService = ps
+						script := fmt.Sprintf("d.init\nd.add ServerAddresses * 8.8.8.8 8.8.4.4\nset State:/Network/Service/%s/DNS\n", ps)
+						cmd2 := exec.Command("scutil")
+						cmd2.Stdin = strings.NewReader(script)
+						_ = cmd2.Run()
+					}
+				}
+				break
+			}
+		}
+	}
+}
+
+func restoreDNS() {
+	if globalPrimaryService != "" {
+		script := fmt.Sprintf("d.init\nd.add ServerAddresses * empty\nset State:/Network/Service/%s/DNS\n", globalPrimaryService)
+		cmd := exec.Command("scutil")
+		cmd.Stdin = strings.NewReader(script)
+		_ = cmd.Run()
+		globalPrimaryService = ""
+	}
+}
 
 func init() {
 	binary.NativeEndian.PutUint32(afIPv4Header[:], unix.AF_INET)
@@ -133,6 +171,29 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 		fmt.Printf("Route IPv6 ::/1: %v %s\n", err3, out3)
 		out4, err4 := exec.Command("route", "add", "-inet6", "8000::/1", "-interface", ifName).CombinedOutput()
 		fmt.Printf("Route IPv6 8000::/1: %v %s\n", err4, out4)
+
+		// Prevent Scoped Routing DNS leak on macOS by forcing DNS through the VPN tunnel.
+		cmd := exec.Command("scutil")
+		cmd.Stdin = strings.NewReader("show State:/Network/Global/IPv4\n")
+		if out, err := cmd.Output(); err == nil {
+			lines := strings.Split(string(out), "\n")
+			for _, line := range lines {
+				if strings.Contains(line, "PrimaryService") {
+					parts := strings.SplitN(line, ":", 2)
+					if len(parts) == 2 {
+						ps := strings.TrimSpace(parts[1])
+						if ps != "" {
+							globalPrimaryService = ps
+							script := fmt.Sprintf("d.init\nd.add ServerAddresses * 8.8.8.8 8.8.4.4\nset State:/Network/Service/%s/DNS\n", ps)
+							cmd2 := exec.Command("scutil")
+							cmd2.Stdin = strings.NewReader(script)
+							_ = cmd2.Run()
+						}
+					}
+					break
+				}
+			}
+		}
 	}
 
 	return &darwinTUN{fd: fd, name: ifName}, nil
@@ -174,10 +235,19 @@ func (t *darwinTUN) Write(buf []byte) (int, error) {
 
 // Close closes the utun socket and removes routes.
 func (t *darwinTUN) Close() error {
+	// Restore DNS
+	if globalPrimaryService != "" {
+		script := fmt.Sprintf("d.init\nd.add ServerAddresses * empty\nset State:/Network/Service/%s/DNS\n", globalPrimaryService)
+		cmd := exec.Command("scutil")
+		cmd.Stdin = strings.NewReader(script)
+		_ = cmd.Run()
+		globalPrimaryService = ""
+	}
+
 	_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
 	_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
-	_ = exec.Command("route", "delete", "-inet6", "::/1", "-interface", t.name).Run()
-	_ = exec.Command("route", "delete", "-inet6", "8000::/1", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-inet6", "::/1").Run()
+	_ = exec.Command("route", "delete", "-inet6", "8000::/1").Run()
 	return unix.Close(t.fd)
 }
 
