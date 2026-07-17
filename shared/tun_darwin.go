@@ -84,6 +84,9 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 		return nil, fmt.Errorf("ifconfig %s inet %s %s mtu %s up: %w", ifName, cidrAddr, addr, mtu, err)
 	}
 
+	// Add a dummy IPv6 address so the interface can accept IPv6 routes (prevents 'Network is unreachable').
+	_ = exec.Command("ifconfig", ifName, "inet6", "fe80::1", "up").Run()
+
 	// 6. Set up default routing
 	if len(cfg.ServerIP) > 0 {
 		serverIPStr := cfg.ServerIP.String()
