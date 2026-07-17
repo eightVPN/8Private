@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -109,7 +110,7 @@ func setupTestServer(t *testing.T) (*VPNServer, *mockTUN, string, string, func()
 	}
 
 	userKey := "test_key_daemon_32chars_pad_here"
-	_, err = store.CreateUser("testuser", userKey, "user", 2)
+	_, err = store.CreateUser("testuser", userKey, "", "user", 2, 0)
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
@@ -150,18 +151,12 @@ func setupTestServer(t *testing.T) (*VPNServer, *mockTUN, string, string, func()
 func dialServer(t *testing.T, addr string, psk []byte) *quic.Conn {
 	t.Helper()
 
-	obf, err := shared.NewObfuscator(psk)
-	if err != nil {
-		t.Fatalf("failed to create client obfuscator: %v", err)
-	}
 
 	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen on client socket: %v", err)
 	}
 	t.Cleanup(func() { clientRaw.Close() })
-
-	clientConn := shared.NewObfuscatedConn(clientRaw, obf)
 
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
@@ -178,7 +173,7 @@ func dialServer(t *testing.T, addr string, psk []byte) *quic.Conn {
 		t.Fatalf("failed to resolve address: %v", err)
 	}
 
-	conn, err := quic.Dial(context.Background(), clientConn, udpAddr, tlsConfig, quicConfig)
+	conn, err := quic.Dial(context.Background(), clientRaw, udpAddr, tlsConfig, quicConfig)
 	if err != nil {
 		t.Fatalf("failed to dial server: %v", err)
 	}
@@ -258,27 +253,27 @@ func TestVPNDaemonDatagramRelay(t *testing.T) {
 		t.Fatalf("auth failed: %s", resp.Message)
 	}
 
-	// Build a fake IPv4 packet from the assigned client IP to an external destination.
 	clientIP := net.ParseIP(resp.AssignedIP).To4()
 	externalIP := net.ParseIP("8.8.8.8").To4()
 	payload := []byte("hello tunnel")
-	pkt := makeIPv4Packet(clientIP, externalIP, 17, payload) // UDP protocol=17
+	pkt := makeIPv4Packet(clientIP, externalIP, 17, payload)
 
-	// Give the server a moment to register the session before sending the datagram.
-	time.Sleep(100 * time.Millisecond)
+	pubIP, _, _ := net.SplitHostPort(addr)
+	dataServerAddr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", pubIP, resp.DataPort))
+	obf, _ := shared.NewObfuscator(psk)
+	dataRawConn, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	dataConn := shared.NewObfuscatedConn(dataRawConn, obf)
+	defer dataConn.Close()
 
-	// Send the packet as a QUIC datagram (client → server → TUN).
-	if err := conn.SendDatagram(pkt); err != nil {
-		t.Fatalf("failed to send datagram: %v", err)
+	if _, err := dataConn.WriteTo(pkt, dataServerAddr); err != nil {
+		t.Fatalf("failed to send packet: %v", err)
 	}
 
-	// Verify the packet appears on the mock TUN's write channel.
 	select {
 	case received := <-tun.writeCh:
 		if len(received) != len(pkt) {
 			t.Fatalf("TUN received %d bytes, expected %d", len(received), len(pkt))
 		}
-		// Verify destination IP in received packet header.
 		dstInPkt := net.IP(received[16:20])
 		if !dstInPkt.Equal(externalIP) {
 			t.Fatalf("packet dst IP mismatch: got %s, want %s", dstInPkt, externalIP)
@@ -302,31 +297,37 @@ func TestVPNDaemonReverseRelay(t *testing.T) {
 
 	clientIP := net.ParseIP(resp.AssignedIP).To4()
 	externalIP := net.ParseIP("1.1.1.1").To4()
+	
+	pubIP, _, _ := net.SplitHostPort(addr)
+	dataServerAddr, _ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", pubIP, resp.DataPort))
+	obf, _ := shared.NewObfuscator(psk)
+	dataRawConn, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	dataConn := shared.NewObfuscatedConn(dataRawConn, obf)
+	defer dataConn.Close()
+
+	// Send a dummy packet to register our dataAddr with the server.
+	dummyPkt := makeIPv4Packet(clientIP, externalIP, 17, []byte("ping"))
+	_, _ = dataConn.WriteTo(dummyPkt, dataServerAddr)
+
+	time.Sleep(100 * time.Millisecond) // wait for server to process
+
+	// Simulate return packet from TUN
 	payload := []byte("reverse packet")
-
-	// Build a packet destined for the client's assigned IP (simulating a return packet).
 	pkt := makeIPv4Packet(externalIP, clientIP, 17, payload)
-
-	// Give the server time to register the session.
-	time.Sleep(100 * time.Millisecond)
-
-	// Push the packet into the mock TUN's read channel (TUN → server → client).
 	tun.readCh <- pkt
 
-	// The server's tunReadLoop should read this, find the session, and send a datagram to the client.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	data, err := conn.ReceiveDatagram(ctx)
+	_ = dataRawConn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 2048)
+	n, _, err := dataConn.ReadFrom(buf)
 	if err != nil {
-		t.Fatalf("failed to receive datagram from server: %v", err)
+		t.Fatalf("failed to receive packet from server: %v", err)
 	}
+	data := buf[:n]
 
 	if len(data) != len(pkt) {
 		t.Fatalf("received %d bytes, expected %d", len(data), len(pkt))
 	}
 
-	// Verify source IP in the relayed packet.
 	srcInPkt := net.IP(data[12:16])
 	if !srcInPkt.Equal(externalIP) {
 		t.Fatalf("relayed packet src IP mismatch: got %s, want %s", srcInPkt, externalIP)

@@ -35,16 +35,65 @@ type AuthResponse struct {
 	Subnet     string `json:"subnet,omitempty"`
 	MTU        int    `json:"mtu,omitempty"`
 	DataPort   int    `json:"data_port,omitempty"`
+	APIKey     string `json:"api_key,omitempty"`
 }
 
 // ClientSession tracks a connected VPN client and its allocated resources.
 type ClientSession struct {
-	conn       *quic.Conn
-	user       *db.User
-	assignedIP net.IP
-	clientAddr net.Addr
-	addrMu     sync.RWMutex
-	cancel     context.CancelFunc
+	conn        *quic.Conn
+	user        *db.User
+	assignedIP  net.IP
+	clientAddr  net.Addr
+	addrMu      sync.RWMutex
+	cancel      context.CancelFunc
+	upLimiter   *TokenBucket
+	downLimiter *TokenBucket
+}
+
+// TokenBucket implements a thread-safe token bucket rate limiter.
+type TokenBucket struct {
+	rate       float64 // bytes per second
+	capacity   float64
+	tokens     float64
+	lastUpdate time.Time
+	mu         sync.Mutex
+}
+
+// NewTokenBucket creates a new TokenBucket given a rate in Mbps.
+func NewTokenBucket(rateMbps int) *TokenBucket {
+	// Mbps to bytes per second
+	rate := float64(rateMbps) * 1000000 / 8
+	return &TokenBucket{
+		rate:       rate,
+		capacity:   rate, // 1 second burst capacity
+		tokens:     rate,
+		lastUpdate: time.Now(),
+	}
+}
+
+// Allow checks if n bytes can be processed, consuming tokens if so.
+func (tb *TokenBucket) Allow(n int) bool {
+	if tb == nil || tb.rate <= 0 {
+		return true // unlimited
+	}
+
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(tb.lastUpdate).Seconds()
+	tb.tokens += elapsed * tb.rate
+	if tb.tokens > tb.capacity {
+		tb.tokens = tb.capacity
+	}
+	tb.lastUpdate = now
+
+	needed := float64(n)
+	if tb.tokens >= needed {
+		tb.tokens -= needed
+		return true
+	}
+	return false
 }
 
 // ServerConfig holds configuration parameters for creating a VPNServer.
@@ -237,6 +286,7 @@ func (s *VPNServer) Start(addr string) error {
 		return fmt.Errorf("failed to listen UDP data port: %w", err)
 	}
 	s.dataConn = shared.NewObfuscatedConn(dataRawConn, s.obfuscator)
+	s.dataPort = dataRawConn.LocalAddr().(*net.UDPAddr).Port
 
 	go s.acceptLoop()
 	go s.dataReadLoop()
@@ -364,6 +414,7 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 		Subnet:     s.ipPool.SubnetCIDR(),
 		MTU:        shared.DefaultMTU,
 		DataPort:   s.dataPort,
+		APIKey:     res.User.APIKey,
 	}
 	if err := json.NewEncoder(stream).Encode(resp); err != nil {
 		_ = s.ipPool.Release(assignedIP)
@@ -376,6 +427,11 @@ func (s *VPNServer) handleConnection(conn *quic.Conn) {
 		user:       res.User,
 		assignedIP: assignedIP,
 		cancel:     sessCancel,
+	}
+
+	if res.User.RateLimit > 0 {
+		sess.upLimiter = NewTokenBucket(res.User.RateLimit)
+		sess.downLimiter = NewTokenBucket(res.User.RateLimit)
 	}
 
 	ipKey := binary.BigEndian.Uint32(assignedIP.To4())
@@ -435,6 +491,12 @@ func (s *VPNServer) dataReadLoop() {
 		s.sessionsMu.RUnlock()
 
 		if ok {
+			if sess.upLimiter != nil && !sess.upLimiter.Allow(len(pkt)) {
+				// Drop packet due to rate limit
+				s.bufPool.Put(bufPtr)
+				continue
+			}
+
 			// Update client's NAT address for returning packets
 			sess.addrMu.Lock()
 			sess.clientAddr = addr
@@ -491,6 +553,12 @@ func (s *VPNServer) tunReadLoop() {
 		s.sessionsMu.RUnlock()
 
 		if ok {
+			if sess.downLimiter != nil && !sess.downLimiter.Allow(len(pkt)) {
+				// Drop packet due to rate limit
+				s.bufPool.Put(bufPtr)
+				continue
+			}
+
 			sess.addrMu.RLock()
 			clientAddr := sess.clientAddr
 			sess.addrMu.RUnlock()

@@ -17,13 +17,13 @@ func TestAuthenticate(t *testing.T) {
 	defer store.Close()
 
 	// 1. Create a regular user with device limit = 2
-	_, err = store.CreateUser("user1", "user_key_1", "user", 2)
+	_, err = store.CreateUser("user1", "user_key_1", "", "user", 2, 0)
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}
 
 	// 2. Create an admin user (with an input limit of 3, which must be overridden to 1 by auth engine)
-	_, err = store.CreateUser("admin1", "admin_key_1", "admin", 3)
+	_, err = store.CreateUser("admin1", "admin_key_1", "admin_api_key_1", "admin", 3, 0)
 	if err != nil {
 		t.Fatalf("failed to create admin: %v", err)
 	}
