@@ -389,6 +389,11 @@ func (c *VPNClient) tunToUdpLoop(ctx context.Context, serverAddr *net.UDPAddr) {
 			return
 		}
 
+		// Skip non-IPv4 packets (e.g. IPv6) to prevent leaks and save bandwidth
+		if n > 0 && (buf[0]>>4) != 4 {
+			continue
+		}
+
 		// Forward raw IP packet via pure UDP
 		if _, err := c.dataConn.WriteTo(buf[:n], serverAddr); err != nil {
 			log.Printf("UDP WriteTo error: %v", err)

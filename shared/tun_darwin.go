@@ -105,12 +105,20 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 		// Clean up stale default routing overrides if they exist
 		_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0").Run()
 		_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0").Run()
+		_ = exec.Command("route", "delete", "-inet6", "::/1").Run()
+		_ = exec.Command("route", "delete", "-inet6", "8000::/1").Run()
 
 		// Route all other traffic to utun interface (0.0.0.0/1 and 128.0.0.0/1)
 		out1, err1 := exec.Command("route", "add", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
 		fmt.Printf("Route 0.0.0.0/1: %v %s\n", err1, string(out1))
 		out2, err2 := exec.Command("route", "add", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
 		fmt.Printf("Route 128.0.0.0/1: %v %s\n", err2, string(out2))
+
+		// Route all IPv6 traffic to utun interface to prevent IPv6 leaks
+		out3, err3 := exec.Command("route", "add", "-inet6", "::/1", "-interface", ifName).CombinedOutput()
+		fmt.Printf("Route IPv6 ::/1: %v %s\n", err3, string(out3))
+		out4, err4 := exec.Command("route", "add", "-inet6", "8000::/1", "-interface", ifName).CombinedOutput()
+		fmt.Printf("Route IPv6 8000::/1: %v %s\n", err4, string(out4))
 	}
 
 	return &darwinTUN{fd: fd, name: ifName}, nil
@@ -154,6 +162,8 @@ func (t *darwinTUN) Write(buf []byte) (int, error) {
 func (t *darwinTUN) Close() error {
 	_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
 	_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-inet6", "::/1", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-inet6", "8000::/1", "-interface", t.name).Run()
 	return unix.Close(t.fd)
 }
 
