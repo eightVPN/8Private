@@ -95,15 +95,21 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 		}
 
 		if gw != "" {
+			// Clean up stale host route first
+			_ = exec.Command("route", "delete", "-host", serverIPStr).Run()
 			// Route server traffic to original gateway so the encrypted tunnel packets don't loop
 			out, err := exec.Command("route", "add", "-host", serverIPStr, gw).CombinedOutput()
 			fmt.Printf("Route host to GW: %v %s\n", err, string(out))
 		}
 
+		// Clean up stale default routing overrides if they exist
+		_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0").Run()
+		_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0").Run()
+
 		// Route all other traffic to utun interface (0.0.0.0/1 and 128.0.0.0/1)
-		out1, err1 := exec.Command("route", "add", "-net", "0.0.0.0/1", "-interface", ifName).CombinedOutput()
+		out1, err1 := exec.Command("route", "add", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
 		fmt.Printf("Route 0.0.0.0/1: %v %s\n", err1, string(out1))
-		out2, err2 := exec.Command("route", "add", "-net", "128.0.0.0/1", "-interface", ifName).CombinedOutput()
+		out2, err2 := exec.Command("route", "add", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
 		fmt.Printf("Route 128.0.0.0/1: %v %s\n", err2, string(out2))
 	}
 
@@ -146,8 +152,8 @@ func (t *darwinTUN) Write(buf []byte) (int, error) {
 
 // Close closes the utun socket and removes routes.
 func (t *darwinTUN) Close() error {
-	_ = exec.Command("route", "delete", "-net", "0.0.0.0/1", "-interface", t.name).Run()
-	_ = exec.Command("route", "delete", "-net", "128.0.0.0/1", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
+	_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", t.name).Run()
 	return unix.Close(t.fd)
 }
 
