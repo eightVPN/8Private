@@ -28,6 +28,7 @@ type AuthResponse struct {
 	Subnet     string `json:"subnet,omitempty"`
 	MTU        int    `json:"mtu,omitempty"`
 	DataPort   int    `json:"data_port,omitempty"`
+	APIKey     string `json:"api_key,omitempty"`
 }
 
 var sniWhitelist = []string{
@@ -46,6 +47,7 @@ type VPNClient struct {
 	mu           sync.Mutex
 	serverAddr   string
 	accessKey    string
+	apiKey       string
 	hwid         string
 	psk          []byte
 	quicConn     *quic.Conn
@@ -81,6 +83,12 @@ func (c *VPNClient) GetActiveMode() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.activeMode
+}
+
+func (c *VPNClient) GetAPIKey() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.apiKey
 }
 
 func (c *VPNClient) GetRxBytes() uint64 {
@@ -226,7 +234,10 @@ func (c *VPNClient) connectUDP(ctx context.Context) error {
 	}
 
 	log.Printf("Authenticated! Assigned IP: %s, Subnet: %s, DataPort: %d", resp.AssignedIP, resp.Subnet, resp.DataPort)
+	c.mu.Lock()
 	c.dataPort = resp.DataPort
+	c.apiKey = resp.APIKey
+	c.mu.Unlock()
 
 	// Setup TUN Device
 	if err := c.setupTUN(resp); err != nil {

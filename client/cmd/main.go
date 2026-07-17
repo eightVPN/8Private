@@ -34,6 +34,7 @@ type StatusResponse struct {
 	ActiveMode string `json:"activeMode"`
 	RxBytes    uint64 `json:"rxBytes"`
 	TxBytes    uint64 `json:"txBytes"`
+	APIKey     string `json:"apiKey"`
 }
 
 func main() {
@@ -141,18 +142,24 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientMutex.Lock()
-	defer clientMutex.Unlock()
+	running := globalClient != nil && globalClient.IsRunning()
+	var mode string
+	var rx, tx uint64
+	var apiKey string
+	if running {
+		mode = globalClient.GetActiveMode()
+		rx = globalClient.GetRxBytes()
+		tx = globalClient.GetTxBytes()
+		apiKey = globalClient.GetAPIKey()
+	}
+	clientMutex.Unlock()
 
 	resp := StatusResponse{
-		Running:    false,
-		ActiveMode: "None",
-	}
-
-	if globalClient != nil && globalClient.IsRunning() {
-		resp.Running = true
-		resp.ActiveMode = globalClient.GetActiveMode()
-		resp.RxBytes = globalClient.GetRxBytes()
-		resp.TxBytes = globalClient.GetTxBytes()
+		Running:    running,
+		ActiveMode: mode,
+		RxBytes:    rx,
+		TxBytes:    tx,
+		APIKey:     apiKey,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

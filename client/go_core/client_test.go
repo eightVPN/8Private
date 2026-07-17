@@ -74,7 +74,7 @@ func TestVPNClientTUN(t *testing.T) {
 	defer store.Close()
 
 	userKey := "secret_key_client_test"
-	_, err = store.CreateUser("test_client_user", userKey, "user", 2)
+	_, err = store.CreateUser("test_client_user", userKey, "api_key_for_test", "user", 2, 0)
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}

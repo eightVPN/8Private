@@ -80,7 +80,7 @@ func main() {
 	defer store.Close()
 
 	userKey := "test_client_secret_key"
-	_, err = store.CreateUser("testuser", userKey, "user", 2)
+	_, err = store.CreateUser("test_client_user", userKey, "api_key_for_test", "user", 2, 0)
 	if err != nil {
 		log.Fatalf("Failed to create user: %v", err)
 	}
