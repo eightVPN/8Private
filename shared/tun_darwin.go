@@ -3,6 +3,7 @@
 package shared
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os/exec"
 
@@ -24,8 +25,13 @@ const (
 )
 
 // afIPv4Header is the 4-byte header that must be prepended to every IPv4
-// packet written to a utun device: AF_INET = 2.
-var afIPv4Header = [afHeaderSize]byte{0, 0, 0, 2}
+// packet written to a utun interface on macOS. The kernel requires this
+// to be in NativeEndian (Host Byte Order).
+var afIPv4Header [afHeaderSize]byte
+
+func init() {
+	binary.NativeEndian.PutUint32(afIPv4Header[:], unix.AF_INET)
+}
 
 // darwinTUN implements TUNDevice for macOS via utun.
 type darwinTUN struct {
