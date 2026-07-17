@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:uuid/uuid.dart';
 import 'services/daemon_service.dart';
+import 'services/server_api_service.dart';
 
 enum VPNState { disconnected, connecting, connected }
 
@@ -17,6 +18,7 @@ class ServerProfile {
   final int port;
   final String accessKey;
   final int latencyMs;
+  String apiKey;
 
   ServerProfile({
     required this.id,
@@ -25,6 +27,7 @@ class ServerProfile {
     required this.port,
     required this.accessKey,
     required this.latencyMs,
+    this.apiKey = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +37,7 @@ class ServerProfile {
         'port': port,
         'accessKey': accessKey,
         'latencyMs': latencyMs,
+        'apiKey': apiKey,
       };
 
   factory ServerProfile.fromJson(Map<String, dynamic> json) => ServerProfile(
@@ -43,6 +47,7 @@ class ServerProfile {
         port: json['port'] as int,
         accessKey: json['accessKey'] as String,
         latencyMs: json['latencyMs'] as int,
+        apiKey: json['apiKey'] as String? ?? '',
       );
 }
 
@@ -52,6 +57,7 @@ class VPNUser {
   final String accessKey;
   final String role; // "owner", "admin", "user"
   final int deviceLimit;
+  final int rateLimit;
   final int activeDevices;
 
   VPNUser({
@@ -60,6 +66,7 @@ class VPNUser {
     required this.accessKey,
     required this.role,
     required this.deviceLimit,
+    required this.rateLimit,
     required this.activeDevices,
   });
 }
@@ -193,40 +200,97 @@ class VPNProvider extends ChangeNotifier {
   }
 
   // Server administration actions
-  void createUser(String username, String role, int deviceLimit) {
-    final newId = (_users.length + 1).toString();
-    final newKey = 'epn_${role}_${username.toLowerCase().replaceAll(' ', '_')}';
-    _users.add(
-      VPNUser(
-        id: newId,
-        username: username,
-        accessKey: newKey,
-        role: role,
-        deviceLimit: role == 'admin' ? 1 : deviceLimit,
-        activeDevices: 0,
-      ),
-    );
-    notifyListeners();
-  }
-
-  void deleteUser(String id) {
-    _users.removeWhere((u) => u.id == id);
-    notifyListeners();
-  }
-
-  void resetUserDevices(String id) {
-    final idx = _users.indexWhere((u) => u.id == id);
-    if (idx != -1) {
-      final oldUser = _users[idx];
-      _users[idx] = VPNUser(
-        id: oldUser.id,
-        username: oldUser.username,
-        accessKey: oldUser.accessKey,
-        role: oldUser.role,
-        deviceLimit: oldUser.deviceLimit,
-        activeDevices: 0,
-      );
+  Future<void> fetchUsers() async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      final data = await ServerApiService.getUsers(_selectedServer!.ip, _selectedServer!.apiKey);
+      _users.clear();
+      for (var u in data) {
+        _users.add(VPNUser(
+          id: u['id'].toString(),
+          username: u['username'] ?? '',
+          accessKey: u['access_key'] ?? '',
+          role: u['role'] ?? 'user',
+          deviceLimit: u['device_limit'] ?? 1,
+          rateLimit: u['rate_limit'] ?? 0,
+          activeDevices: u['active_devices'] ?? 0,
+        ));
+      }
       notifyListeners();
+    } catch (e) {
+      print('Failed to fetch users: $e');
+    }
+  }
+
+  Future<void> createUser(String username, String role, int deviceLimit, int rateLimit) async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      await ServerApiService.createUser(_selectedServer!.ip, _selectedServer!.apiKey, username, role, deviceLimit, rateLimit);
+      await fetchUsers();
+    } catch (e) {
+      print('Failed to create user: $e');
+    }
+  }
+
+  Future<void> deleteUser(String id) async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      await ServerApiService.deleteUser(_selectedServer!.ip, _selectedServer!.apiKey, int.parse(id));
+      await fetchUsers();
+    } catch (e) {
+      print('Failed to delete user: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> reissueAccessKey(String id) async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return null;
+    try {
+      final res = await ServerApiService.reissueAccessKey(_selectedServer!.ip, _selectedServer!.apiKey, int.parse(id));
+      await fetchUsers();
+      return res;
+    } catch (e) {
+      print('Failed to reissue access key: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> reissueApiKey(String id) async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return null;
+    try {
+      final res = await ServerApiService.reissueApiKey(_selectedServer!.ip, _selectedServer!.apiKey, int.parse(id));
+      await fetchUsers();
+      return res;
+    } catch (e) {
+      print('Failed to reissue api key: $e');
+      return null;
+    }
+  }
+
+  Future<void> resetUserDevices(String id) async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      await ServerApiService.resetDevices(_selectedServer!.ip, _selectedServer!.apiKey, int.parse(id));
+      await fetchUsers();
+    } catch (e) {
+      print('Failed to reset devices: $e');
+    }
+  }
+
+  Future<void> rebootServer() async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      await ServerApiService.serverReboot(_selectedServer!.ip, _selectedServer!.apiKey);
+    } catch (e) {
+      print('Failed to reboot server: $e');
+    }
+  }
+
+  Future<void> wipeServer() async {
+    if (_selectedServer == null || _selectedServer!.apiKey.isEmpty) return;
+    try {
+      await ServerApiService.serverWipe(_selectedServer!.ip, _selectedServer!.apiKey);
+    } catch (e) {
+      print('Failed to wipe server: $e');
     }
   }
 
@@ -357,6 +421,13 @@ class VPNProvider extends ChangeNotifier {
           // Daemon died or disconnected externally
           disconnect();
           return;
+      }
+
+      final currentApiKey = status['apiKey'] as String?;
+      if (currentApiKey != null && currentApiKey.isNotEmpty && _selectedServer != null && _selectedServer!.apiKey != currentApiKey) {
+        _selectedServer!.apiKey = currentApiKey;
+        _saveToPrefs();
+        fetchUsers();
       }
 
       // Read real traffic bytes
