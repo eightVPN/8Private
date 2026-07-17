@@ -346,12 +346,19 @@ func (c *VPNClient) setupTUN(resp *AuthResponse) error {
 		pubIP = c.serverAddr
 	}
 
+	var parsedPubIP net.IP
+	if ip := net.ParseIP(pubIP); ip != nil {
+		parsedPubIP = ip
+	} else if ips, err := net.LookupIP(pubIP); err == nil && len(ips) > 0 {
+		parsedPubIP = ips[0]
+	}
+
 	tunConfig := shared.TUNConfig{
 		DevName: c.GenerateVirtualTUNName(),
 		Address: net.ParseIP(resp.AssignedIP),
 		CIDR:    cidr,
 		MTU:     resp.MTU,
-		ServerIP: net.ParseIP(pubIP),
+		ServerIP: parsedPubIP,
 	}
 
 	dev, err := shared.CreateTUN(tunConfig)
