@@ -105,6 +105,11 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 			fmt.Printf("Route host to GW: %v %s\n", err, string(out))
 		}
 
+		// Use a ULA (fd00::1/64) instead of Link-Local (fe80::1) so macOS considers it a valid source IP for global IPv6 destinations
+		if err := exec.Command("ifconfig", ifName, "inet6", "fd00::1/64", "up").Run(); err != nil {
+			fmt.Printf("Warning: failed to set IPv6 on %s: %v\n", ifName, err)
+		}
+
 		// Clean up stale default routing overrides if they exist
 		_ = exec.Command("route", "delete", "-net", "0.0.0.0", "-netmask", "128.0.0.0").Run()
 		_ = exec.Command("route", "delete", "-net", "128.0.0.0", "-netmask", "128.0.0.0").Run()
@@ -113,15 +118,15 @@ func CreateTUN(cfg TUNConfig) (TUNDevice, error) {
 
 		// Route all other traffic to utun interface (0.0.0.0/1 and 128.0.0.0/1)
 		out1, err1 := exec.Command("route", "add", "-net", "0.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
-		fmt.Printf("Route 0.0.0.0/1: %v %s\n", err1, string(out1))
+		fmt.Printf("Route 0.0.0.0/1: %v %s\n", err1, out1)
 		out2, err2 := exec.Command("route", "add", "-net", "128.0.0.0", "-netmask", "128.0.0.0", "-interface", ifName).CombinedOutput()
-		fmt.Printf("Route 128.0.0.0/1: %v %s\n", err2, string(out2))
+		fmt.Printf("Route 128.0.0.0/1: %v %s\n", err2, out2)
 
 		// Route all IPv6 traffic to utun interface to prevent IPv6 leaks
 		out3, err3 := exec.Command("route", "add", "-inet6", "::/1", "-interface", ifName).CombinedOutput()
-		fmt.Printf("Route IPv6 ::/1: %v %s\n", err3, string(out3))
+		fmt.Printf("Route IPv6 ::/1: %v %s\n", err3, out3)
 		out4, err4 := exec.Command("route", "add", "-inet6", "8000::/1", "-interface", ifName).CombinedOutput()
-		fmt.Printf("Route IPv6 8000::/1: %v %s\n", err4, string(out4))
+		fmt.Printf("Route IPv6 8000::/1: %v %s\n", err4, out4)
 	}
 
 	return &darwinTUN{fd: fd, name: ifName}, nil

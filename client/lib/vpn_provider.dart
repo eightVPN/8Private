@@ -340,13 +340,14 @@ class VPNProvider extends ChangeNotifier {
   }
 
   // Select server
-  void selectServer(ServerProfile server) {
+  void selectServer(ServerProfile server) async {
     _selectedServer = server;
     _latency = server.latencyMs;
     _saveToPrefs();
     if (_state == VPNState.connected) {
-      disconnect();
-      connect();
+      await disconnect();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await connect();
     } else {
       notifyListeners();
     }
