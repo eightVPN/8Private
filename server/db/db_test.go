@@ -16,7 +16,7 @@ func TestStore(t *testing.T) {
 	defer store.Close()
 
 	// 1. Test CreateUser
-	user, err := store.CreateUser("testuser", "key_abc123", "user", 2)
+	user, err := store.CreateUser("testuser", "key_abc123", "", "user", 2, 0)
 	if err != nil {
 		t.Fatalf("failed to create user: %v", err)
 	}

@@ -14,8 +14,10 @@ type User struct {
 	ID          int64
 	Username    string
 	AccessKey   string
+	APIKey      string
 	Role        string // "owner", "admin", "user"
 	DeviceLimit int
+	RateLimit   int
 	CreatedAt   time.Time
 }
 
@@ -71,13 +73,19 @@ func (s *Store) migrate() error {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT NOT NULL,
 		access_key TEXT NOT NULL UNIQUE,
+		api_key TEXT,
 		role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'user')),
 		device_limit INTEGER NOT NULL DEFAULT 1 CHECK(device_limit >= 1 AND device_limit <= 5),
+		rate_limit INTEGER NOT NULL DEFAULT 0,
 		created_at DATETIME NOT NULL
 	);`
 	if _, err := s.db.Exec(usersSchema); err != nil {
 		return err
 	}
+
+	// Add new columns to existing users table if they don't exist
+	s.db.Exec("ALTER TABLE users ADD COLUMN api_key TEXT;")
+	s.db.Exec("ALTER TABLE users ADD COLUMN rate_limit INTEGER NOT NULL DEFAULT 0;")
 
 	// Create devices table for HWID tracking
 	devicesSchema := `
@@ -99,15 +107,15 @@ func (s *Store) migrate() error {
 }
 
 // CreateUser inserts a new user into the database.
-func (s *Store) CreateUser(username, accessKey, role string, deviceLimit int) (*User, error) {
-	query := `INSERT INTO users (username, access_key, role, device_limit, created_at)
-			  VALUES (?, ?, ?, ?, ?) RETURNING id, created_at`
+func (s *Store) CreateUser(username, accessKey, apiKey, role string, deviceLimit, rateLimit int) (*User, error) {
+	query := `INSERT INTO users (username, access_key, api_key, role, device_limit, rate_limit, created_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at`
 	
 	now := time.Now()
 	var id int64
 	var createdAt time.Time
 
-	err := s.db.QueryRow(query, username, accessKey, role, deviceLimit, now).Scan(&id, &createdAt)
+	err := s.db.QueryRow(query, username, accessKey, apiKey, role, deviceLimit, rateLimit, now).Scan(&id, &createdAt)
 	if err != nil {
 		return nil, err
 	}
@@ -116,23 +124,63 @@ func (s *Store) CreateUser(username, accessKey, role string, deviceLimit int) (*
 		ID:          id,
 		Username:    username,
 		AccessKey:   accessKey,
+		APIKey:      apiKey,
 		Role:        role,
 		DeviceLimit: deviceLimit,
+		RateLimit:   rateLimit,
 		CreatedAt:   createdAt,
 	}, nil
 }
 
 // GetUserByKey retrieves a user by their access key.
 func (s *Store) GetUserByKey(accessKey string) (*User, error) {
-	query := `SELECT id, username, access_key, role, device_limit, created_at FROM users WHERE access_key = ?`
+	query := `SELECT id, username, access_key, COALESCE(api_key, ''), role, device_limit, rate_limit, created_at FROM users WHERE access_key = ?`
 	var u User
-	err := s.db.QueryRow(query, accessKey).Scan(&u.ID, &u.Username, &u.AccessKey, &u.Role, &u.DeviceLimit, &u.CreatedAt)
+	err := s.db.QueryRow(query, accessKey).Scan(&u.ID, &u.Username, &u.AccessKey, &u.APIKey, &u.Role, &u.DeviceLimit, &u.RateLimit, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// GetUserByAPIKey retrieves a user by their API key.
+func (s *Store) GetUserByAPIKey(apiKey string) (*User, error) {
+	query := `SELECT id, username, access_key, COALESCE(api_key, ''), role, device_limit, rate_limit, created_at FROM users WHERE api_key = ?`
+	var u User
+	err := s.db.QueryRow(query, apiKey).Scan(&u.ID, &u.Username, &u.AccessKey, &u.APIKey, &u.Role, &u.DeviceLimit, &u.RateLimit, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// GetUserByID retrieves a user by their ID.
+func (s *Store) GetUserByID(id int64) (*User, error) {
+	query := `SELECT id, username, access_key, COALESCE(api_key, ''), role, device_limit, rate_limit, created_at FROM users WHERE id = ?`
+	var u User
+	err := s.db.QueryRow(query, id).Scan(&u.ID, &u.Username, &u.AccessKey, &u.APIKey, &u.Role, &u.DeviceLimit, &u.RateLimit, &u.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// UpdateUserAPIKey updates a user's API key.
+func (s *Store) UpdateUserAPIKey(id int64, newAPIKey string) error {
+	_, err := s.db.Exec("UPDATE users SET api_key = ? WHERE id = ?", newAPIKey, id)
+	return err
+}
+
+// UpdateUserAccessKey updates a user's access key.
+func (s *Store) UpdateUserAccessKey(id int64, newAccessKey string) error {
+	_, err := s.db.Exec("UPDATE users SET access_key = ? WHERE id = ?", newAccessKey, id)
+	return err
 }
 
 // DeleteUser deletes a user by their ID.
@@ -226,7 +274,7 @@ func (s *Store) ResetUserDevices(userID int64) error {
 
 // ListUsers lists all registered users.
 func (s *Store) ListUsers() ([]User, error) {
-	query := `SELECT id, username, access_key, role, device_limit, created_at FROM users`
+	query := `SELECT id, username, access_key, COALESCE(api_key, ''), role, device_limit, rate_limit, created_at FROM users`
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -236,7 +284,7 @@ func (s *Store) ListUsers() ([]User, error) {
 	var list []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.AccessKey, &u.Role, &u.DeviceLimit, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.AccessKey, &u.APIKey, &u.Role, &u.DeviceLimit, &u.RateLimit, &u.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, u)
