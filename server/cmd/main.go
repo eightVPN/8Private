@@ -58,7 +58,7 @@ func main() {
 	if err == nil && len(users) == 0 {
 		log.Println("Database is empty. Auto-provisioning default Owner account...")
 		ownerKey := "epn_owner_key_default"
-		u, err := store.CreateUser("default_owner", ownerKey, "owner", 5)
+		u, err := store.CreateUser("default_owner", ownerKey, apiKey, "owner", 5, 0)
 		if err != nil {
 			log.Printf("Failed to provision default owner: %v", err)
 		} else {
