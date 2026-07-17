@@ -1,7 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'theme.dart';
+import 'vpn_provider.dart';
 
 class ServerAdministrationScreen extends StatefulWidget {
   final Function(String) onNavigate;
@@ -28,6 +31,10 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<VPNProvider>().fetchUsers();
+    });
   }
 
   @override
@@ -35,13 +42,6 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
     _pulseController.dispose();
     super.dispose();
   }
-
-  // Hardcoded users for UI demo
-  final List<Map<String, String>> _users = [
-    {'name': 'alpha_protocol_01', 'status': 'Active Connection • 45ms'},
-    {'name': 'spectre_node_usr', 'status': 'Disconnected • 2h ago'},
-    {'name': 'cyber_junkie_77', 'status': 'Active Connection • 12ms'},
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -203,6 +203,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
   }
 
   Widget _buildUserManagement() {
+    final vpn = context.watch<VPNProvider>();
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
       child: GlassPanel(
@@ -223,46 +224,50 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
                     ),
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryContainer,
-                    borderRadius: BorderRadius.circular(100),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color.fromRGBO(122, 34, 255, 0.5),
-                        blurRadius: 15,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.person_add,
-                        size: 16,
-                        color: AppColors.onPrimaryContainer,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Provision\nNew User',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.onPrimaryContainer,
-                          height: 1.2,
+                InkWell(
+                  onTap: () => _showCreateUserDialog(context),
+                  borderRadius: BorderRadius.circular(100),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryContainer,
+                      borderRadius: BorderRadius.circular(100),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color.fromRGBO(122, 34, 255, 0.5),
+                          blurRadius: 15,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.person_add,
+                          size: 16,
+                          color: AppColors.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Provision\nNew User',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onPrimaryContainer,
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            ..._users.map(
+            ...vpn.users.map(
               (user) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Container(
@@ -298,7 +303,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              user['name']!,
+                              user.username,
                               style: GoogleFonts.inter(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -306,7 +311,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
                               ),
                             ),
                             Text(
-                              user['status']!,
+                              '${user.role.toUpperCase()} • Devices: ${user.activeDevices}/${user.deviceLimit} • Limit: ${user.rateLimit == 0 ? "Unlimited" : "${user.rateLimit} Mbps"}',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -316,11 +321,23 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
                           ],
                         ),
                       ),
-                      _iconBtn(Icons.qr_code_2, AppColors.onSurfaceVariant),
-                      _iconBtn(Icons.content_copy, AppColors.onSurfaceVariant),
+                      _iconBtn(Icons.content_copy, AppColors.onSurfaceVariant, () async {
+                        Clipboard.setData(ClipboardData(text: user.accessKey));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Access Key copied to clipboard')));
+                      }),
+                      _iconBtn(Icons.refresh, AppColors.onSurfaceVariant, () async {
+                        final res = await vpn.reissueAccessKey(user.id);
+                        if (res != null) {
+                           Clipboard.setData(ClipboardData(text: res['access_key']));
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New Key copied to clipboard')));
+                        }
+                      }),
                       _iconBtn(
                         Icons.delete_forever,
                         Color.fromRGBO(105, 0, 5, 1.0),
+                        () {
+                          vpn.deleteUser(user.id);
+                        }
                       ),
                     ],
                   ),
@@ -333,9 +350,9 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
     );
   }
 
-  Widget _iconBtn(IconData icon, Color color) {
+  Widget _iconBtn(IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -431,6 +448,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
   }
 
   Widget _buildServerControls() {
+    final vpn = context.read<VPNProvider>();
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       child: GlassPanel(
@@ -463,6 +481,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
               'Full system cycle',
               Color(0xFFFFC107),
               false,
+              () => vpn.rebootServer()
             ),
             const SizedBox(height: 8),
             _buildControlButton(
@@ -471,6 +490,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
               'Irreversible operation',
               AppColors.error,
               true,
+              () => vpn.wipeServer()
             ),
             const SizedBox(height: 8),
             _buildControlButton(
@@ -479,6 +499,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
               'Revoke all local access',
               AppColors.onSurfaceVariant,
               false,
+              () {}
             ),
           ],
         ),
@@ -492,9 +513,13 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
     String subtitle,
     Color iconColor,
     bool isDestructive,
+    VoidCallback onTap,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
@@ -556,7 +581,7 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildBackupCard() {
@@ -748,6 +773,121 @@ class _ServerAdministrationScreenState extends State<ServerAdministrationScreen>
               )
             : Icon(icon, color: AppColors.outline, size: 24),
       ),
+    );
+  }
+
+  void _showCreateUserDialog(BuildContext context) {
+    final vpn = context.read<VPNProvider>();
+    final usernameCtrl = TextEditingController();
+    String selectedRole = 'user';
+    int deviceLimit = 1;
+    int rateLimit = 0; // 0 = Unlimited
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surfaceContainer,
+              title: Text('Provision New User', style: TextStyle(color: AppColors.onSurface)),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: usernameCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Username',
+                        labelStyle: TextStyle(color: AppColors.onSurfaceVariant),
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.outline)),
+                      ),
+                      style: TextStyle(color: AppColors.onSurface),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedRole,
+                      dropdownColor: AppColors.surfaceContainerHigh,
+                      items: ['user', 'admin'].map((String val) {
+                        return DropdownMenuItem(
+                          value: val,
+                          child: Text(val, style: TextStyle(color: AppColors.onSurface)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          selectedRole = val!;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Role',
+                        labelStyle: TextStyle(color: AppColors.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      value: deviceLimit,
+                      dropdownColor: AppColors.surfaceContainerHigh,
+                      items: [1, 2, 3, 4, 5].map((int val) {
+                        return DropdownMenuItem(
+                          value: val,
+                          child: Text('$val Devices', style: TextStyle(color: AppColors.onSurface)),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          deviceLimit = val!;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Device Limit',
+                        labelStyle: TextStyle(color: AppColors.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<int>(
+                      value: rateLimit,
+                      dropdownColor: AppColors.surfaceContainerHigh,
+                      items: [
+                        DropdownMenuItem(value: 0, child: Text('Unlimited', style: TextStyle(color: AppColors.onSurface))),
+                        DropdownMenuItem(value: 5, child: Text('5 Mbps', style: TextStyle(color: AppColors.onSurface))),
+                        DropdownMenuItem(value: 10, child: Text('10 Mbps', style: TextStyle(color: AppColors.onSurface))),
+                        DropdownMenuItem(value: 20, child: Text('20 Mbps', style: TextStyle(color: AppColors.onSurface))),
+                        DropdownMenuItem(value: 50, child: Text('50 Mbps', style: TextStyle(color: AppColors.onSurface))),
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          rateLimit = val!;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        labelText: 'Speed Limit',
+                        labelStyle: TextStyle(color: AppColors.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text('Cancel', style: TextStyle(color: AppColors.onSurfaceVariant)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  onPressed: () {
+                    if (usernameCtrl.text.isNotEmpty) {
+                      vpn.createUser(usernameCtrl.text, selectedRole, deviceLimit, rateLimit);
+                      Navigator.of(ctx).pop();
+                    }
+                  },
+                  child: Text('Create', style: TextStyle(color: AppColors.onPrimary)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
